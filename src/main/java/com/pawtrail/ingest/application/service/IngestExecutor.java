@@ -1,6 +1,7 @@
 package com.pawtrail.ingest.application.service;
 
 import com.pawtrail.common.exception.CustomException;
+import com.pawtrail.ingest.domain.enums.RunStatus;
 import com.pawtrail.ingest.domain.enums.SourceType;
 import com.pawtrail.ingest.domain.exception.IngestErrorCode;
 import com.pawtrail.ingest.domain.exception.QuotaExhaustedException;
@@ -23,6 +24,11 @@ import org.springframework.stereotype.Service;
  * 같은 객체 안의 호출에는 걸리지 않기 때문입니다.
  * 한 클래스에 두면 조용히 같은 스레드에서 돌아 트리거 응답이 수집이 끝날 때까지 막힙니다.
  * 한국관광공사 소스는 이틀 걸립니다.
+ *
+ * 비동기 자체는 공통 모듈이 켭니다.
+ * CommonAsyncAutoConfiguration 이 @EnableAsync 를 달고 있고 실행자는 따로 만들지 않습니다.
+ * Boot 의 applicationTaskExecutor 를 그대로 쓰며
+ * 필요하면 spring.task.execution.pool.* 로 서비스마다 조절합니다.
  *
  * 상태 전이는 여기서만 일어납니다.
  * 수집기에는 실행 엔티티를 넘기지 않고 진행을 기록하는 통로만 넘깁니다.
@@ -80,7 +86,7 @@ public class IngestExecutor {
             return;
         }
 
-        CollectionContext context = new CollectionContext(run.getRunType(), run.getProgress());
+        CollectionContext context = buildContext(run);
         log.info("수집을 시작합니다. runId={} source={} runType={}",
                 runId, run.getSource(), run.getRunType());
 
@@ -101,6 +107,35 @@ public class IngestExecutor {
             log.error("수집 중 오류가 났습니다. runId={}", runId, e);
             chunkWriter.fail(runId, context.snapshot(), toMessage(e));
         }
+    }
+
+    /**
+     * 이 실행이 어디서부터 시작할지 정합니다.
+     *
+     * 바로 앞 실행이 쿼터로 멈췄으면 그 재개 지점을 물려받습니다.
+     * 물려받지 않으면 처음부터 다시 받게 되고, 이미 쓴 쿼터를 한 번 더 쓰는 셈입니다.
+     * 되돌릴 수 없는 자원이라 그 낭비가 그날 몫을 통째로 날릴 수 있습니다.
+     *
+     * 호출 수는 물려받지 않습니다. 재개 지점만 가져옵니다.
+     * 그 규칙과 근거는 CollectionContext.resumeFrom 에 적어 두었습니다.
+     *
+     * 앞 실행이 끝까지 마쳤거나 실패했으면 처음부터 시작합니다.
+     *
+     * 실패한 실행의 재개 지점을 쓰지 않는 이유가 있습니다.
+     * 쿼터로 멈춘 것은 우리가 예상한 정상 경로이고 어디까지 받았는지가 분명하지만,
+     * 실패는 그 자리에서 무엇이 잘못됐는지 아직 모르는 상태입니다.
+     * 그대로 이어받으면 문제가 난 구간을 조용히 건너뜁니다.
+     * 이미 쓴 쿼터를 다시 쓰게 되지만, 무엇을 빠뜨렸는지 모르는 채로 두는 것보다 낫습니다.
+     */
+    private CollectionContext buildContext(IngestRun run) {
+        return ingestRunRepository.findPreviousRun(run.getSource(), run.getId())
+                .filter(previous -> previous.getStatus() == RunStatus.QUOTA_STOPPED)
+                .map(previous -> {
+                    log.info("앞 실행의 재개 지점을 물려받습니다. previousRunId={} progress={}",
+                            previous.getId(), previous.getProgress());
+                    return CollectionContext.resumeFrom(run.getRunType(), previous.getProgress());
+                })
+                .orElseGet(() -> CollectionContext.startFresh(run.getRunType()));
     }
 
     /**

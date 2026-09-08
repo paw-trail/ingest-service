@@ -22,9 +22,43 @@ public final class CollectionContext {
     private final RunType runType;
     private final Map<String, OperationProgress> progress;
 
-    public CollectionContext(RunType runType, Map<String, OperationProgress> initialProgress) {
+    private CollectionContext(RunType runType, Map<String, OperationProgress> progress) {
         this.runType = runType;
-        this.progress = initialProgress == null ? new HashMap<>() : new HashMap<>(initialProgress);
+        this.progress = progress;
+    }
+
+    /**
+     * 처음부터 시작합니다.
+     */
+    public static CollectionContext startFresh(RunType runType) {
+        return new CollectionContext(runType, new HashMap<>());
+    }
+
+    /**
+     * 쿼터로 멈춘 앞 실행을 이어받습니다.
+     *
+     * 재개 지점만 가져오고 호출 수는 0 부터 다시 셉니다.
+     *
+     * 호출 수를 이어받으면 안 되는 이유가 여기 있습니다.
+     * 그 값은 이 실행에서 몇 번 불렀는지를 뜻하고 수집기가 그것으로 한도를 판단합니다.
+     * 앞 실행의 1,000 을 그대로 물려받으면 날이 바뀌어 한도가 되살아났는데도
+     * 첫 호출부터 한도를 넘긴 것으로 보고 아무것도 못 합니다.
+     *
+     * 반대로 재개 지점은 반드시 물려받아야 합니다.
+     * 없으면 처음부터 다시 받게 되고, 이미 쓴 쿼터를 한 번 더 쓰는 셈입니다.
+     * 되돌릴 수 없는 자원이라 그 낭비가 그날 몫을 통째로 날릴 수 있습니다.
+     *
+     * @param previous 앞 실행의 진행 상태. 비어 있으면 처음부터 시작한 것과 같음
+     */
+    public static CollectionContext resumeFrom(
+            RunType runType, Map<String, OperationProgress> previous) {
+
+        Map<String, OperationProgress> seeded = new HashMap<>();
+        if (previous != null) {
+            previous.forEach((operation, point) ->
+                    seeded.put(operation, new OperationProgress(0, point.cursor())));
+        }
+        return new CollectionContext(runType, seeded);
     }
 
     public RunType runType() {
@@ -35,7 +69,7 @@ public final class CollectionContext {
      * 그 오퍼레이션을 이 실행에서 몇 번 불렀는지 알려줍니다.
      *
      * 쿼터가 오퍼레이션마다 따로 걸리므로 수집기가 이 값으로 한도를 판단합니다.
-     * 이어받은 실행이면 지난 실행의 값이 아니라 이번 실행의 값입니다.
+     * 이어받은 실행이면 앞 실행의 값이 아니라 이번 실행의 값입니다.
      */
     public int countOf(String operation) {
         OperationProgress current = progress.get(operation);
@@ -45,9 +79,9 @@ public final class CollectionContext {
     /**
      * 그 오퍼레이션을 어디까지 처리했는지 알려줍니다.
      *
-     * 쿼터로 멈춘 실행을 이어받을 때 여기서부터 시작합니다.
+     * 쿼터로 멈춘 실행을 이어받으면 앞 실행이 남긴 자리부터 시작합니다.
      * 형식은 수집기가 정합니다. 페이지 번호일 수도 마지막 식별자일 수도 있습니다.
-     * 아직 시작 전이면 null 입니다.
+     * 처음 시작하는 것이면 null 입니다.
      */
     public String cursorOf(String operation) {
         OperationProgress current = progress.get(operation);

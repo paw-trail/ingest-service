@@ -33,4 +33,10 @@ public class IngestRunRepositoryImpl implements IngestRunRepository {
     public boolean existsRunningBySource(SourceType source) {
         return ingestRunJpaRepository.existsBySourceAndStatus(source, RunStatus.RUNNING);
     }
+
+    @Override
+    public Optional<IngestRun> findPreviousRun(SourceType source, UUID currentRunId) {
+        return ingestRunJpaRepository
+                .findFirstBySourceAndIdNotOrderByStartedAtDescIdDesc(source, currentRunId);
+    }
 }
