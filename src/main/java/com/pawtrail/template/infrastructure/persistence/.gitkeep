@@ -1,0 +1,9 @@
+domain/repository 의 약속을 구현합니다.
+
+약속과 이름이 1:1 입니다.
+  XxxRepository → XxxRepositoryImpl
+  XxxStore      → XxxStoreImpl
+
+조회 수단을 둘 쓰게 되어도 파일은 Impl 하나입니다.
+스프링 데이터 인터페이스와 JPAQueryFactory 를 함께 주입받아,
+단순한 조회는 앞의 것에 위임하고 동적 조건은 뒤의 것으로 짭니다.

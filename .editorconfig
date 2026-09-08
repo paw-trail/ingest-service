@@ -1,0 +1,18 @@
+root = true
+
+[*]
+end_of_line = lf
+charset = utf-8
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# 자바와 Gradle 스크립트는 4칸임
+# common 과 service-template 의 손으로 쓴 파일이 전부 4칸이라 여기에 맞춤
+# 이 절이 없으면 위의 2칸이 적용되어 레포마다 들여쓰기가 갈림
+[*.{java,gradle}]
+indent_size = 4
+
+[*.md]
+trim_trailing_whitespace = false

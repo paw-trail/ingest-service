@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: ko-KR
+
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  changed_files_summary: false
+  poem: false
+  review_status: true
+  review_details: false
+  # 기계가 만든 산출물만 제외함
+  # 사람이 쓴 적이 없으므로 애초에 리뷰할 것이 없음
+  #
+  # db/migration 은 한때 여기 있었으나 뺐음
+  # "한 번 적용되면 못 고친다" 가 리뷰를 빼는 근거로 쓰였는데
+  # PR 은 적용 전 시점이라 오히려 마지막으로 고칠 수 있는 자리임
+  # 컬럼 타입·NULL 여부·인덱스는 적용된 뒤에는 새 번호로만 바꿀 수 있음
+  path_filters:
+    - "!**/build/**"
+    - "!**/generated/**"
+  auto_review:
+    enabled: true
+    drafts: false
+
+chat:
+  auto_reply: true

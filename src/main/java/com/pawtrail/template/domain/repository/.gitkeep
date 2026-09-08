@@ -1,0 +1,7 @@
+저장하고 찾아온다는 약속을 둡니다.
+
+JPA 도 Redis 도 이 인터페이스에는 나오지 않습니다.
+무엇을 할 수 있는지만 적고 어떻게 하는지는 infrastructure 가 정합니다.
+
+Redis 를 쓰는 저장소도 같은 규칙을 따릅니다.
+XxxStore 로 이름 짓고 구현은 infrastructure/persistence 에 둡니다.

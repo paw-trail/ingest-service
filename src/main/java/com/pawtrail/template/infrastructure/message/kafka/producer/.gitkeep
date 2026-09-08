@@ -1,0 +1,4 @@
+domain/event 의 약속을 구현합니다.
+
+domain/event 에 인터페이스를 만들지 않은 서비스에서는 비어 있습니다.
+그때는 서비스가 공통 모듈의 OutboxEventRecorder 를 직접 씁니다.

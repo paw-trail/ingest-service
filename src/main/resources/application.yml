@@ -1,0 +1,40 @@
+# ─────────────────────────────────────────────────────────────
+# 복제 후 아래 값을 이 서비스에 맞게 바꿈
+#   spring.application.name    서비스명
+#
+# 이 파일에는 세 줄만 둠
+# 나머지 설정은 전부 config 저장소(paw-trail/config)에서 내려옴
+#   포트·DB·계정              <서비스명>.yml
+#   주소(DB·Kafka·Redis 등)   application-{env}.yml
+#   공통 동작                 application.yml
+#
+# *config 저장소로 옮긴 값을 여기에 남겨 두지 말 것
+#   같은 키가 두 곳에 있으면 어느 쪽이 이기는지 매번 확인해야 함
+# ─────────────────────────────────────────────────────────────
+spring:
+
+  # config 저장소에서 이 이름의 파일을 찾음
+  # 저장소명·이미지명·유레카 등록 이름과도 같아야 함
+  application:
+    name: template-service
+
+  # 설정을 받아 올 곳임
+  #
+  # optional: 이 붙어 있으면 config-server 가 떠 있지 않아도 기동됨
+  # 서비스 하나만 띄워 확인하는 일이 잦으므로 이것이 없으면 매번 config-server 를
+  # 함께 띄워야 하고, 테스트도 실패함
+  #
+  # 주소에 기본값을 붙이는 것은 의도임
+  # 로컬은 언제나 localhost:8888 이므로 기본값이 정답이고
+  # 없으면 각자 IntelliJ 실행 구성에 환경변수를 넣어야 함
+  # 컨테이너와 AWS 에서만 CONFIG_HOST 를 지정해 덮어씀
+  config:
+    import: "optional:configserver:http://${CONFIG_HOST:localhost}:8888"
+
+  # 아무도 프로파일을 지정하지 않으면 local 로 봄
+  # active 가 아니라 default 인 것이 중요함
+  #   active  는 강제라 컨테이너에서 덮어쓸 때 헷갈림
+  #   default 는 안 정해주면 local 이라 컨테이너의 SPRING_PROFILES_ACTIVE=dev 가 이김
+  # 덕분에 IntelliJ 는 실행 구성에 환경변수를 안 넣어도 local 로 돌고 Loki 전송이 꺼짐
+  profiles:
+    default: local

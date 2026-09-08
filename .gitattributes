@@ -1,0 +1,22 @@
+# 모든 텍스트 파일은 저장소에 LF 로 저장하고 체크아웃할 때도 LF 로 내림
+# 윈도우에서 CRLF 로 받으면 리눅스 컨테이너 안에서 스크립트가 깨짐
+* text=auto eol=lf
+
+# 컨테이너 안에서 실행되므로 반드시 LF
+*.sh    text eol=lf
+*.sql   text eol=lf
+*.conf  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.xml   text eol=lf
+
+# CRLF 면 환경변수 값 끝에 \r 이 붙어 접속이 조용히 실패함
+.env*   text eol=lf
+
+# 윈도우 배치 파일은 CRLF 여야 함
+*.bat   text eol=crlf
+
+# 바이너리는 손대지 않음
+*.jar   binary
+*.png   binary
+*.jpg   binary
