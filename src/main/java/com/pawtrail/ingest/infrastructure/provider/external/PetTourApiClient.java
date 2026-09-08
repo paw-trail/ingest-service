@@ -99,9 +99,7 @@ public class PetTourApiClient {
      * 인증키는 가려서 남깁니다. 설정 저장소가 공개라 값이 드러나면 안 됩니다.
      */
     public PetTourListPage fetchSyncList(int pageNo, int numOfRows) {
-        JsonNode root = callWithRetry(pageNo, numOfRows);
-        verifyResultCode(root);
-        return toPage(root);
+        return toPage(callWithRetry(pageNo, numOfRows));
     }
 
     /**
@@ -171,8 +169,9 @@ public class PetTourApiClient {
             throw new IllegalStateException("응답 본문이 비어 있음");
         }
 
+        JsonNode root;
         try {
-            return objectMapper.readTree(body);
+            root = objectMapper.readTree(body);
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             // 소스가 형식을 바꿨거나 오류 안내를 다른 형태로 보낸 것임
             // 앞부분만 남깁니다. 본문 전체를 남기면 로그가 응답으로 뒤덮입니다
@@ -180,6 +179,19 @@ public class PetTourApiClient {
                     body.substring(0, Math.min(body.length(), 300)));
             throw new IllegalStateException("응답 형식이 올바르지 않음", e);
         }
+
+        // 결과 코드 확인이 여기 있어야 합니다.
+        //
+        // 이 소스는 실패를 상태 코드로도 주고 200 으로도 주는데,
+        // 확인을 재시도 바깥에 두면 200 으로 온 일시적인 실패가 한 번도 다시 시도되지 않고
+        // 그대로 밖으로 나갑니다. 초당 제한이나 기관 무응답이 그렇습니다.
+        // 게다가 그 예외는 우리 오류 타입으로 감싸이지도 않아 부르는 쪽 계약이 깨집니다.
+        //
+        // 안으로 들여놓으면 두 경로의 판정이 한곳에 모이고,
+        // 다시 시도할 값이 있는 것은 루프가 받아 주고
+        // 끝내 실패하면 아래에서 우리 오류로 바뀝니다.
+        verifyResultCode(root);
+        return root;
     }
 
     /**
@@ -260,9 +272,13 @@ public class PetTourApiClient {
             throw new CustomException(IngestErrorCode.SOURCE_API_FAILED);
         }
 
-        // 실패 응답은 최상위에 결과 코드가 있습니다
+        // 실패 응답은 감싼 구조 없이 최상위에 결과 코드가 옵니다
+        //
+        // 값을 보지 않고 오류로 단정하면 안 됩니다.
+        // 최상위에 성공 코드가 담겨 오는 응답이 있으면 정상인데도 실패로 처리되고,
+        // 알 수 없는 코드로 분류되어 다시 시도까지 하게 됩니다.
         JsonNode topLevelCode = root.get("resultCode");
-        if (topLevelCode != null) {
+        if (topLevelCode != null && !SUCCESS_CODE.equals(topLevelCode.asText())) {
             handleErrorCode(topLevelCode.asText(), text(root, "resultMsg"));
         }
 

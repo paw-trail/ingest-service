@@ -72,7 +72,13 @@ public class IngestTriggerService {
         }
 
         try {
-            IngestRun run = ingestRunRepository.save(IngestRun.start(source, runType));
+            // 그 자리에서 반영합니다.
+            //
+            // 그냥 저장하면 반영이 트랜잭션이 끝날 때까지 미뤄질 수 있습니다.
+            // 그러면 유일 인덱스에 부딪히는 시점도 함께 미뤄져
+            // 예외가 이 try 를 지나가지 않고 밖에서 나므로 아래 변환이 걸리지 않습니다.
+            // 부르는 쪽은 이미 실행 중이라는 안내 대신 정체를 알 수 없는 서버 오류를 받습니다.
+            IngestRun run = ingestRunRepository.saveAndFlush(IngestRun.start(source, runType));
             log.info("수집 실행을 만들었습니다. runId={} source={} runType={}",
                     run.getId(), source, runType);
             return run.getId();

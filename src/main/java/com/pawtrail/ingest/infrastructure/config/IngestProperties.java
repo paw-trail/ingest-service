@@ -1,7 +1,9 @@
 package com.pawtrail.ingest.infrastructure.config;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
@@ -43,6 +45,17 @@ public record IngestProperties(
         @Positive(message = "app.ingest.retry-backoff-ms 는 양수여야 합니다")
         long retryBackoffMs,
 
+        // @NotNull 과 @Valid 를 함께 붙입니다.
+        //
+        // 앞엣것이 없으면 app.ingest.pet-tour 묶음이 통째로 빠졌을 때 이 값이 null 로 들어옵니다.
+        // 그러면 기동은 되고 클라이언트를 만드는 자리에서 널 참조로 터지는데,
+        // 그때는 무엇이 빠졌는지가 메시지에 안 나옵니다.
+        //
+        // 뒤엣것이 없으면 안쪽의 검증이 아예 돌지 않습니다.
+        // 중첩된 값은 바깥에서 들여다보라고 표시해 주어야 검사됩니다.
+        // 표시가 없으면 인증키가 비어 있어도 그대로 떠서 호출이 전부 실패한 뒤에야 드러납니다.
+        @NotNull(message = "app.ingest.pet-tour 설정이 필요합니다")
+        @Valid
         PetTour petTour) {
 
     /**
