@@ -10,6 +10,7 @@ import com.pawtrail.ingest.domain.repository.IngestRunRepository;
 import java.util.List;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,9 +48,16 @@ public class IngestTriggerService {
      * 만들어 두고 곧바로 실패로 마감하면 아무 일도 안 한 행이 이력에 남고,
      * 그것을 재개 대상으로 착각할 여지가 생깁니다.
      *
-     * 같은 소스가 실행 중이면 거절합니다.
-     * 수집은 비동기라 두 번 부르면 나란히 돌 수 있고,
-     * 그러면 같은 쿼터를 두 배로 쓰면서 둘 다 한도에 못 미쳐 멈춥니다.
+     * 같은 소스가 실행 중이면 거절합니다. 방어가 두 겹입니다.
+     *
+     * 먼저 조회로 걸러 냅니다. 대부분은 여기서 막히고 응답도 자연스럽습니다.
+     * 그러나 조회와 저장 사이가 비어 있어 두 요청이 같은 순간에 들어오면
+     * 둘 다 없음을 보고 지나갑니다.
+     * 그래서 저장 시점에 유일 인덱스가 한 번 더 막습니다.
+     *
+     * 조회만 두거나 제약만 두면 안 됩니다.
+     * 조회만 두면 그 틈으로 같은 소스가 두 번 돌아 호출 허용량을 두 배로 쓰고,
+     * 제약만 두면 흔한 경우까지 예외를 만들어 잡는 모양이 됩니다.
      */
     @Transactional
     public UUID startRun(SourceType source, RunType runType) {
@@ -63,9 +71,23 @@ public class IngestTriggerService {
             throw new CustomException(IngestErrorCode.INGEST_ALREADY_RUNNING);
         }
 
-        IngestRun run = ingestRunRepository.save(IngestRun.start(source, runType));
-        log.info("수집 실행을 만들었습니다. runId={} source={} runType={}",
-                run.getId(), source, runType);
-        return run.getId();
+        try {
+            // 그 자리에서 반영합니다.
+            //
+            // 그냥 저장하면 반영이 트랜잭션이 끝날 때까지 미뤄질 수 있습니다.
+            // 그러면 유일 인덱스에 부딪히는 시점도 함께 미뤄져
+            // 예외가 이 try 를 지나가지 않고 밖에서 나므로 아래 변환이 걸리지 않습니다.
+            // 부르는 쪽은 이미 실행 중이라는 안내 대신 정체를 알 수 없는 서버 오류를 받습니다.
+            IngestRun run = ingestRunRepository.saveAndFlush(IngestRun.start(source, runType));
+            log.info("수집 실행을 만들었습니다. runId={} source={} runType={}",
+                    run.getId(), source, runType);
+            return run.getId();
+
+        } catch (DataIntegrityViolationException e) {
+            // uq_ingest_run_running 에 부딪힘
+            // 위 조회를 통과한 뒤 다른 요청이 먼저 저장한 경우임
+            log.info("같은 소스의 실행이 방금 만들어졌습니다. source={}", source);
+            throw new CustomException(IngestErrorCode.INGEST_ALREADY_RUNNING, e);
+        }
     }
 }

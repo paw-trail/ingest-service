@@ -64,3 +64,26 @@ eureka:
     # 테스트는 서비스 디스커버리에 참여하지 않음
     # 켜 두면 등록을 시도하다 실패해 로그가 뒤덮임
     enabled: false
+
+app:
+  # config 저장소 2계층(ingest-service.yml)의 사본임
+  #
+  # *왜 여기에 다시 적나
+  #   위에서 설정 서버를 껐으므로 2계층 값도 하나도 안 내려옴
+  #   IngestProperties 에 검증이 걸려 있어 값이 비면 바인딩이 실패하고
+  #   컨텍스트가 뜨지 않아 contextLoads 부터 깨짐
+  #
+  # *값이 운영과 달라도 됨
+  #   이 테스트가 확인하는 것은 엔티티와 스키마 대조이지 수집 동작이 아님
+  #   실제 호출은 일어나지 않으므로 인증키도 자리만 채우면 됨
+  #
+  # *운영 값을 여기 옮겨 적지 말 것
+  #   특히 인증키는 이 파일이 저장소에 커밋되므로 넣으면 그대로 공개됨
+  ingest:
+    chunk-size: 100
+    call-interval-ms: 0
+    max-retries: 0
+    retry-backoff-ms: 1000
+    pet-tour:
+      base-url: http://localhost
+      service-key: test-only

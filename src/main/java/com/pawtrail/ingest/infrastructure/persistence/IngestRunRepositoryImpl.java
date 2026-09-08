@@ -25,6 +25,11 @@ public class IngestRunRepositoryImpl implements IngestRunRepository {
     }
 
     @Override
+    public IngestRun saveAndFlush(IngestRun ingestRun) {
+        return ingestRunJpaRepository.saveAndFlush(ingestRun);
+    }
+
+    @Override
     public Optional<IngestRun> findById(UUID id) {
         return ingestRunJpaRepository.findById(id);
     }
