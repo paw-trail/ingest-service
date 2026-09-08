@@ -1,4 +1,4 @@
-package com.pawtrail.template;
+package com.pawtrail.ingest;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -30,11 +30,11 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
  * org.springframework.boot.autoconfigure.domain에서 현재 위치로 옮겨졌습니다.
  */
 @SpringBootApplication
-@EntityScan(basePackages = {"com.pawtrail.template", "com.pawtrail.common"})
-@EnableJpaRepositories(basePackages = {"com.pawtrail.template", "com.pawtrail.common"})
-public class TemplateApplication {
+@EntityScan(basePackages = {"com.pawtrail.ingest", "com.pawtrail.common"})
+@EnableJpaRepositories(basePackages = {"com.pawtrail.ingest", "com.pawtrail.common"})
+public class IngestApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(TemplateApplication.class, args);
+        SpringApplication.run(IngestApplication.class, args);
     }
 }

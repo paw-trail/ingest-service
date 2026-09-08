@@ -15,7 +15,7 @@ spring:
   application:
     # 가려진 main 쪽 값을 다시 적은 것임
     # 없으면 로그의 appName 과 유레카 등록 이름이 unknown 이 됨
-    name: template-service
+    name: ingest-service
 
   profiles:
     # 가려진 main 쪽 값을 다시 적은 것임

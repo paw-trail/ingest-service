@@ -1,4 +1,4 @@
-package com.pawtrail.template;
+package com.pawtrail.ingest;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -39,7 +39,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 //   PostgreSQLContainer 뒤에 <?> 가 붙어 있으면 옛 클래스를 쓰고 있다는 뜻임
 @SpringBootTest
 @Testcontainers
-class TemplateApplicationTests {
+class IngestApplicationTests {
 
     // @ServiceConnection 이 컨테이너의 주소와 계정을 DataSource 에 자동으로 넣어 줌
     // 따라서 테스트 설정 파일에 spring.datasource 를 적지 않음

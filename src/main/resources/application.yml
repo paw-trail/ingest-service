@@ -16,7 +16,7 @@ spring:
   # config 저장소에서 이 이름의 파일을 찾음
   # 저장소명·이미지명·유레카 등록 이름과도 같아야 함
   application:
-    name: template-service
+    name: ingest-service
 
   # 설정을 받아 올 곳임
   #
