@@ -211,7 +211,7 @@ class GoCampingCollectorTest {
     private GoCampingCollector collector(int listPageSize, int chunkSize) {
         IngestProperties properties = new IngestProperties(
                 chunkSize, 0, 0, 1000, 5,
-                new IngestProperties.PetTour("https://example.test", "test-only", 100),
+                new IngestProperties.PetTour("https://example.test", "test-only", 100, 0),
                 new IngestProperties.GoCamping(
                         "https://example.test", "test-only", listPageSize),
                 new IngestProperties.Culture("build/tmp/test-culture.csv"));

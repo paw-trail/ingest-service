@@ -93,6 +93,8 @@ app:
       base-url: http://localhost
       service-key: test-only
       list-page-size: 100
+      # 이 시험들은 표본을 돌리지 않음
+      sample-size: 0
     gocamping:
       base-url: http://localhost
       service-key: test-only

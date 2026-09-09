@@ -73,8 +73,17 @@ public class IngestTriggerService {
             throw new CustomException(IngestErrorCode.COLLECTOR_NOT_REGISTERED);
         }
 
-        if (runType == RunType.INCREMENTAL) {
-            log.info("증분 수집은 아직 지원하지 않습니다. source={}", source);
+        if (runType == RunType.INCREMENTAL && !source.supportsIncremental()) {
+            // 소스마다 증분의 값어치가 다릅니다.
+            //
+            // 아껴야 하는 자원은 공공데이터 호출 허용량인데 그것이 큰 소스는 하나뿐입니다.
+            // 고캠핑은 한 번에 전량이 오고 문화정보원은 파일을 읽어 부를 것이 없습니다.
+            // 그 둘에서 증분은 전량과 결과가 같습니다.
+            //
+            // 받아 주고 안에서 전량을 도는 방법도 있지만 그러면 같은 일을 두 이름으로
+            // 부르게 되고, 코드만 보아서는 그 구별이 되지 않습니다.
+            // 조용히 전량이 돌던 예전 상태로 되돌아가는 셈입니다.
+            log.info("이 소스는 증분 수집을 지원하지 않습니다. source={}", source);
             throw new CustomException(IngestErrorCode.RUN_TYPE_NOT_SUPPORTED);
         }
 

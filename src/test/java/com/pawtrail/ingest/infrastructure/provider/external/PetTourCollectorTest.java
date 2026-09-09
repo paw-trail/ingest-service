@@ -20,6 +20,8 @@ import com.pawtrail.ingest.domain.exception.QuotaExhaustedException;
 import com.pawtrail.ingest.domain.model.OperationProgress;
 import com.pawtrail.ingest.domain.provider.CollectionContext;
 import com.pawtrail.ingest.domain.provider.dto.RawDocumentDraft;
+import com.pawtrail.ingest.domain.repository.RawDocumentRepository;
+import com.pawtrail.ingest.domain.repository.SourceModifiedView;
 import com.pawtrail.ingest.infrastructure.config.IngestProperties;
 import com.pawtrail.ingest.infrastructure.provider.external.dto.PetTourListPage;
 import java.time.LocalDateTime;
@@ -57,6 +59,10 @@ class PetTourCollectorTest {
 
     @Mock
     private PetTourApiClient client;
+
+    // 증분일 때만 씁니다. 전량 수집 시험에서는 불리지 않습니다
+    @Mock
+    private RawDocumentRepository rawDocumentRepository;
 
     private final PetTourDisplayBodyAssembler assembler = new PetTourDisplayBodyAssembler();
 
@@ -328,6 +334,61 @@ class PetTourCollectorTest {
     }
 
     @Test
+    @DisplayName("증분이면 수정 시각이 늦은 것만 상세를 부른다")
+    void callsDetailOnlyForChangedItems() {
+        givenList(page(1, 10, 3, List.of(
+                itemAt("1", "20260101000000"),
+                itemAt("2", "20260101000000"),
+                itemAt("3", "20260101000000"))));
+        givenDetails();
+        when(rawDocumentRepository.findSourceModified(SourceType.PET_TOUR)).thenReturn(List.of(
+                stored("1", LocalDateTime.of(2025, 1, 1, 0, 0)),   // 담아 둔 것이 더 이름 → 부름
+                stored("2", LocalDateTime.of(2026, 1, 1, 0, 0)))); // 같음 → 건너뜀
+        // 3 은 담아 둔 것이 아예 없음 → 새 장소라 부름
+
+        CollectionContext context =
+                CollectionContext.startFresh(RunType.INCREMENTAL);
+        collector(10, 100).collect(context, chunks::add);
+
+        assertThat(chunks.get(0))
+                .extracting(RawDocumentDraft::sourceId)
+                .containsExactly("1", "3");
+        verify(client, never()).fetchPetTourDetail(eq("2"), any());
+    }
+
+    @Test
+    @DisplayName("판단할 근거가 없으면 부르는 쪽으로 간다")
+    void callsDetailWhenTimestampIsUnreadable() {
+        givenList(page(1, 10, 2, List.of(
+                itemAt("1", "20260101000000"),
+                itemAt("2", "이건 시각이 아님"))));
+        givenDetails();
+        when(rawDocumentRepository.findSourceModified(SourceType.PET_TOUR)).thenReturn(List.of(
+                stored("1", null),                                 // 담아 둔 시각이 비어 있음
+                stored("2", LocalDateTime.of(2026, 1, 1, 0, 0))));  // 목록 시각을 못 읽음
+
+        collector(10, 100)
+                .collect(CollectionContext.startFresh(RunType.INCREMENTAL), chunks::add);
+
+        // 놓치는 것보다 허용량을 조금 더 쓰는 편이 나음
+        assertThat(chunks.get(0))
+                .extracting(RawDocumentDraft::sourceId)
+                .containsExactly("1", "2");
+    }
+
+    @Test
+    @DisplayName("전량 수집이면 저장된 것을 보지 않는다")
+    void ignoresStoredTimestampsOnFullRun() {
+        givenList(page(1, 10, 1, List.of(itemAt("1", "20260101000000"))));
+        givenDetails();
+
+        collector(10, 100).collect(freshContext(), chunks::add);
+
+        assertThat(chunks.get(0)).hasSize(1);
+        verify(rawDocumentRepository, never()).findSourceModified(any());
+    }
+
+    @Test
     @DisplayName("허용량에 걸리면 모아 둔 것을 넘기고 예외를 올려보낸다")
     void flushesBeforeQuotaStop() {
         givenList(page(1, 10, 3, List.of(
@@ -384,10 +445,10 @@ class PetTourCollectorTest {
 
         IngestProperties properties = new IngestProperties(
                 chunkSize, 0, 0, 1000, maxConsecutiveFailures,
-                new IngestProperties.PetTour("https://example.test", "test-only", listPageSize),
+                new IngestProperties.PetTour("https://example.test", "test-only", listPageSize, 0),
                 new IngestProperties.GoCamping("https://example.test", "test-only", 100),
                 new IngestProperties.Culture("build/tmp/test-culture.csv"));
-        return new PetTourCollector(client, assembler, properties);
+        return new PetTourCollector(client, assembler, properties, rawDocumentRepository);
     }
 
     /**
@@ -448,6 +509,29 @@ class PetTourCollectorTest {
         @SuppressWarnings("unchecked")
         Consumer<String> onAttempt = (Consumer<String>) last;
         onAttempt.accept(operation);
+    }
+
+    private Map<String, Object> itemAt(String contentId, String modifiedTime) {
+        Map<String, Object> item = item(contentId, "1", "VE03", "장소 " + contentId);
+        item.put("modifiedtime", modifiedTime);
+        return item;
+    }
+
+    /**
+     * 저장된 수정 시각을 흉내 냅니다. 값이 비어 있을 수 있어 그 자리도 함께 봅니다.
+     */
+    private SourceModifiedView stored(String sourceId, LocalDateTime modifiedAt) {
+        return new SourceModifiedView() {
+            @Override
+            public String getSourceId() {
+                return sourceId;
+            }
+
+            @Override
+            public LocalDateTime getSourceModified() {
+                return modifiedAt;
+            }
+        };
     }
 
     private CollectionContext freshContext() {

@@ -65,4 +65,31 @@ public interface RawDocumentRepository {
      * 없는 식별자가 섞여 있다는 뜻이며, 부르는 쪽이 그것을 판단합니다.
      */
     List<RawDocument> findAllByIds(Collection<UUID> ids);
+
+    /**
+     * 그 소스의 식별자와 수정 시각만 한 번에 읽어 옵니다.
+     *
+     * 증분 수집이 상세를 부를지 판단하는 자리입니다.
+     * 목록에서 받은 수정 시각이 여기 담긴 값보다 늦으면 바뀐 것으로 봅니다.
+     *
+     * 원본을 통째로 읽지 않습니다.
+     * 문서 하나에 소스 응답이 그대로 들어 있어 천 건이면 수십 메가바이트가 됩니다.
+     * 판단에 필요한 것은 두 값뿐입니다.
+     */
+    List<SourceModifiedView> findSourceModified(SourceType source);
+
+    /**
+     * 그 소스에서 가장 오래 전에 받아 온 문서를 돌려줍니다.
+     *
+     * 증분이 도는 전제를 검증하는 표본입니다.
+     *
+     * 방금 처리한 문서는 받아 온 시각이 새것이라 뒤로 갑니다.
+     * 그래서 앞쪽에는 자연히 이번에 건너뛴 것들이 옵니다.
+     * 수집기가 무엇을 건너뛰었는지 따로 알려주지 않아도 됩니다.
+     *
+     * 오래된 것부터 뽑는 이유가 하나 더 있습니다.
+     * 무작위보다 예측 가능하고, 오래 받지 않은 것일수록
+     * 소스가 조용히 고쳤을 가능성이 높습니다.
+     */
+    List<RawDocument> findOldestFetched(SourceType source, int size);
 }
