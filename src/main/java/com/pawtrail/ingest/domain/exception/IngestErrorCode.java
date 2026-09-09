@@ -113,7 +113,27 @@ public enum IngestErrorCode implements ErrorCode {
     // 컬럼 수가 맞지 않을 때 남김
     // 파일이 새 판으로 바뀌면서 컬럼이 늘거나 줄면 여기서 먼저 드러남
     // 그대로 담으면 값이 한 칸씩 밀린 채로 들어가고 나중에 알아채기 어려움
-    SOURCE_FILE_MALFORMED(HttpStatus.INTERNAL_SERVER_ERROR, "소스 파일의 형태가 다릅니다.");
+    SOURCE_FILE_MALFORMED(HttpStatus.INTERNAL_SERVER_ERROR, "소스 파일의 형태가 다릅니다."),
+
+    // 상태를 바꾸라고 받은 식별자 중에 없는 것이 섞여 있음
+    //
+    // * 하나라도 없으면 전체를 거절함
+    //   extract 가 방금 우리에게 받아 간 것을 되돌려 주는 것인데
+    //   없다는 것은 무언가 어긋난 것임
+    //   ⛔조용히 건너뛰면 그 문서가 영영 대기로 남아 목록 맨 앞을 막음
+    //   대기 목록은 언제나 오래된 것부터 주므로 맨 앞이 막히면 그 뒤가 안 나감
+    //
+    // * 400 인 이유
+    //   보낸 목록이 잘못된 것이므로 요청 문제임
+    //   어느 식별자가 없었는지는 로그에 앞쪽 열 개까지 남김
+    RAW_DOCUMENT_NOT_FOUND(HttpStatus.BAD_REQUEST, "없는 원본 문서가 포함돼 있습니다."),
+
+    // 같은 식별자가 처리 완료와 실패에 함께 들어옴
+    //
+    // 어느 것으로 둘지 우리가 고를 수 없으므로 거절함
+    // 부르는 쪽의 실수이고 조용히 한쪽을 택하면 그 판단이 어디에도 안 남음
+    RAW_DOCUMENT_STATUS_CONFLICT(
+            HttpStatus.BAD_REQUEST, "같은 문서가 처리 완료와 실패에 함께 있습니다.");
 
     private final HttpStatus httpStatus;
     private final String message;

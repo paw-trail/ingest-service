@@ -14,4 +14,6 @@ public interface RawDocumentJpaRepository extends JpaRepository<RawDocument, UUI
     Optional<RawDocument> findBySourceAndSourceId(SourceType source, String sourceId);
 
     Page<RawDocument> findByStatus(DocumentStatus status, Pageable pageable);
+
+    long countByStatus(DocumentStatus status);
 }

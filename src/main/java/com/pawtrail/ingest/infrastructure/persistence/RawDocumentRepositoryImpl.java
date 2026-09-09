@@ -5,7 +5,10 @@ import com.pawtrail.ingest.domain.enums.SourceType;
 import com.pawtrail.ingest.domain.model.RawDocument;
 import com.pawtrail.ingest.domain.repository.RawDocumentRepository;
 import com.pawtrail.ingest.infrastructure.persistence.jpa.RawDocumentJpaRepository;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -33,5 +36,20 @@ public class RawDocumentRepositoryImpl implements RawDocumentRepository {
     @Override
     public Page<RawDocument> findPending(Pageable pageable) {
         return rawDocumentJpaRepository.findByStatus(DocumentStatus.PENDING, pageable);
+    }
+
+    @Override
+    public Page<RawDocument> findByStatus(DocumentStatus status, Pageable pageable) {
+        return rawDocumentJpaRepository.findByStatus(status, pageable);
+    }
+
+    @Override
+    public long countByStatus(DocumentStatus status) {
+        return rawDocumentJpaRepository.countByStatus(status);
+    }
+
+    @Override
+    public List<RawDocument> findAllByIds(Collection<UUID> ids) {
+        return rawDocumentJpaRepository.findAllById(ids);
     }
 }
