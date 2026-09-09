@@ -1,5 +1,6 @@
 package com.pawtrail.ingest.presentation.request;
 
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.util.List;
 import java.util.UUID;
@@ -29,9 +30,15 @@ public record RawDocumentStatusRequest(
         // 한 번에 받는 양을 막아 둡니다.
         // extract 가 백 건씩 가져가므로 그보다 훨씬 큰 값이 오면 무언가 잘못된 것이고,
         // 그대로 받으면 트랜잭션 하나가 지나치게 길어집니다.
+        //
+        // ⛔원소 하나하나에도 제약을 겁니다.
+        //  @Size 는 개수만 봅니다. { "done": [null] } 이 그대로 통과해
+        //  조회까지 내려가면 없는 문서로 판정되어 400 이 나옵니다.
+        //  결과는 맞지만 이유가 틀립니다. 요청이 잘못된 것인데 없는 문서라고 답하고,
+        //  그 사이에 조회를 한 번 헛돕니다.
         @Size(max = 1000, message = "done 은 한 번에 1000건까지입니다")
-        List<UUID> done,
+        List<@NotNull(message = "done 에 빈 값이 들어 있습니다") UUID> done,
 
         @Size(max = 1000, message = "failed 는 한 번에 1000건까지입니다")
-        List<UUID> failed) {
+        List<@NotNull(message = "failed 에 빈 값이 들어 있습니다") UUID> failed) {
 }

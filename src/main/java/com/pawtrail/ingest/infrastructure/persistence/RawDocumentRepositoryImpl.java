@@ -35,12 +35,14 @@ public class RawDocumentRepositoryImpl implements RawDocumentRepository {
 
     @Override
     public Page<RawDocument> findPending(Pageable pageable) {
-        return rawDocumentJpaRepository.findByStatus(DocumentStatus.PENDING, pageable);
+        return rawDocumentJpaRepository.findByStatusOrderByIdAsc(DocumentStatus.PENDING, pageable);
     }
 
     @Override
     public Page<RawDocument> findByStatus(DocumentStatus status, Pageable pageable) {
-        return rawDocumentJpaRepository.findByStatus(status, pageable);
+        // 정렬은 메서드 이름에 들어 있으므로 여기서는 개수만 넘김
+        // Pageable 에도 정렬을 담으면 같은 규칙이 두 곳에 생겨 한쪽만 고치는 실수가 남
+        return rawDocumentJpaRepository.findByStatusOrderByIdAsc(status, pageable);
     }
 
     @Override

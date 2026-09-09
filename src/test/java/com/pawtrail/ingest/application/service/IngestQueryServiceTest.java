@@ -87,6 +87,11 @@ class IngestQueryServiceTest {
         verify(rawDocumentRepository).findByStatus(eq(DocumentStatus.PENDING), captor.capture());
         assertThat(captor.getValue().getPageNumber()).isZero();
         assertThat(captor.getValue().getPageSize()).isEqualTo(100);
+
+        // 정렬을 여기서 담지 않습니다.
+        // 그 규칙은 저장소 메서드 이름에 있고, 두 곳에 두면 한쪽만 고치는 실수가 납니다.
+        // 실제로 오래된 것부터 오는지는 데이터베이스를 띄워 따로 확인합니다
+        assertThat(captor.getValue().getSort().isUnsorted()).isTrue();
     }
 
     @Test
