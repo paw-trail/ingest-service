@@ -30,6 +30,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataAccessResourceFailureException;
 
 /**
  * 이 장치가 있는 이유는 증분이 확인되지 않은 전제 위에 서 있기 때문입니다.
@@ -117,6 +118,35 @@ class PetTourSampleVerifierTest {
 
         // 저장하지 않으므로 재개 지점은 옮기지 않음
         assertThat(context.cursorOf(PetTourApiClient.DETAIL_PET_TOUR_OPERATION)).isNull();
+    }
+
+    @Test
+    @DisplayName("표본을 뽑는 조회가 실패해도 예외를 올려보내지 않는다")
+    void swallowsSampleQueryFailure() {
+        when(rawDocumentRepository.findOldestFetched(SourceType.PET_TOUR, 20))
+                .thenThrow(new DataAccessResourceFailureException("연결이 끊겼습니다"));
+
+        // 밖으로 나가면 실행기가 실패로 마감함
+        // 수집은 이미 끝났는데 실패로 남고, 실패한 실행은 재개 지점을 물려주지 않아
+        // 다음 실행이 처음부터 다시 훑음
+        assertThat(verifier(20).verify(context())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("도중에 끊겨도 그때까지 알아낸 어긋남은 알린다")
+    void reportsFindingsFoundBeforeFailure() {
+        RawDocument changed = document("1019041", "12");
+        RawDocument broken = document("2019041", "12");
+        givenSample(changed, broken);
+        setHash(changed, "12", Map.of("acmpyTypeCd", "전구역 동반가능"));
+        setField(broken, "payload", "이것은 JSON 이 아님");
+        givenDetails(Map.of("acmpyTypeCd", "동반 불가"));
+
+        List<String> notes = verifier(20).verify(context());
+
+        // 열 건을 보고 끊겼어도 그 안에 어긋난 것이 있었다면 알려야 함
+        assertThat(notes).hasSize(1);
+        assertThat(notes.get(0)).contains("1019041").contains("1건 중 1건");
     }
 
     @Test

@@ -70,6 +70,10 @@ public class PetTourSampleVerifier {
      *  허용량에 걸리는 것도 마찬가지입니다. 수집은 이미 끝났습니다.
      *  그래서 무엇이 나든 여기서 삼키고 그때까지 알아낸 것만 돌려줍니다.
      *
+     *  표본을 뽑는 조회까지 그 안에 있습니다.
+     *  그것이 밖으로 나가면 실행이 실패로 마감되고, 실패한 실행은 재개 지점을
+     *  물려주지 않아 다음 실행이 처음부터 다시 훑습니다.
+     *
      * 부르는 호출은 진행 기록에 셉니다.
      * 같은 오퍼레이션을 쓰므로 세지 않으면 허용량 계산이 어긋납니다.
      * 다만 재개 지점은 옮기지 않습니다. 저장하지 않기 때문입니다.
@@ -85,28 +89,36 @@ public class PetTourSampleVerifier {
             return List.of();
         }
 
-        List<RawDocument> sample = rawDocumentRepository.findOldestFetched(SOURCE, size);
-        if (sample.isEmpty()) {
-            return List.of();
-        }
-
         List<String> changed = new ArrayList<>();
         int checked = 0;
 
-        for (RawDocument document : sample) {
-            try {
+        // 조회부터 감쌉니다.
+        //
+        // 표본을 뽑는 조회도 실패할 수 있습니다.
+        // 연결이 끊기거나 조회가 오래 걸리면 그 자리에서 예외가 납니다.
+        //
+        // 그것이 밖으로 나가면 실행기가 예상하지 못한 오류로 보고 실패로 마감합니다.
+        // 수집은 이미 끝까지 마쳤는데 실행이 실패로 남고,
+        // 실패한 실행은 재개 지점을 물려주지 않아 다음 실행이 처음부터 다시 훑습니다.
+        // 진단하려다 수집을 망치는 셈이라 이 메서드는 무엇도 밖으로 내보내지 않습니다.
+        try {
+            List<RawDocument> sample = rawDocumentRepository.findOldestFetched(SOURCE, size);
+
+            for (RawDocument document : sample) {
                 if (hasChanged(document, context)) {
                     changed.add(document.getSourceId());
                 }
                 checked++;
                 sleep(properties.callIntervalMs());
-
-            } catch (RuntimeException e) {
-                // 표본이 실패해도 실행은 정상으로 마감되어야 합니다
-                log.warn("표본 검증을 도중에 멈춥니다. sourceId={} 확인={}건 이유={}",
-                        document.getSourceId(), checked, e.toString());
-                break;
             }
+
+        } catch (Exception e) {
+            // 실행 중 오류를 뜻하는 것만 잡습니다.
+            // 메모리 부족 같은 것은 삼키면 안 되므로 여기서 걸리지 않습니다.
+            //
+            // 그때까지 알아낸 것은 그대로 씁니다.
+            // 열 건을 보고 끊겼어도 그 안에 어긋난 것이 있었다면 그것은 알려야 합니다
+            log.warn("표본 검증을 도중에 멈춥니다. 확인={}건 이유={}", checked, e.toString());
         }
 
         if (changed.isEmpty()) {
@@ -117,7 +129,7 @@ public class PetTourSampleVerifier {
         // 전제가 틀렸다는 증거입니다.
         // 목록의 시각은 그대로인데 상세가 달라진 장소가 있다는 뜻이며,
         // 증분이 이런 변경을 놓치고 있었다는 말이 됩니다
-        log.error("⛔증분 전제가 어긋났습니다. 확인={}건 어긋남={}건 sourceIds={}",
+        log.error("증분 전제가 어긋났습니다. 확인={}건 어긋남={}건 sourceIds={}",
                 checked, changed.size(), changed);
         return List.of("표본 검증: " + checked + "건 중 " + changed.size()
                 + "건이 목록 시각은 그대로인데 상세가 달라짐 (" + String.join(", ", changed) + ")");
