@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -14,6 +15,7 @@ import static org.mockito.Mockito.when;
 import com.pawtrail.ingest.domain.enums.RunType;
 import com.pawtrail.ingest.domain.enums.SourceType;
 import com.pawtrail.ingest.domain.exception.CollectionInterruptedException;
+import com.pawtrail.ingest.domain.exception.PermanentSourceErrorException;
 import com.pawtrail.ingest.domain.exception.QuotaExhaustedException;
 import com.pawtrail.ingest.domain.model.OperationProgress;
 import com.pawtrail.ingest.domain.provider.CollectionContext;
@@ -26,12 +28,14 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.stubbing.Answer;
 
 /**
  * 이 클래스가 지키는 것은 셋입니다.
@@ -107,12 +111,14 @@ class PetTourCollectorTest {
     @Test
     @DisplayName("목록은 언제나 전량을 훑고 재개 지점을 남기지 않는다")
     void alwaysWalksWholeListAndLeavesNoCursor() {
-        when(client.fetchSyncList(1, 2)).thenReturn(page(1, 2, 5, List.of(
-                item("1", "1", "VE03", "가"), item("2", "1", "VE03", "나"))));
-        when(client.fetchSyncList(2, 2)).thenReturn(page(2, 2, 5, List.of(
-                item("3", "1", "VE03", "다"), item("4", "1", "VE03", "라"))));
-        when(client.fetchSyncList(3, 2)).thenReturn(page(3, 2, 5, List.of(
-                item("5", "1", "VE03", "마"))));
+        when(client.fetchSyncList(eq(1), eq(2), any())).thenAnswer(returning(LIST,
+                page(1, 2, 5, List.of(item("1", "1", "VE03", "가"),
+                        item("2", "1", "VE03", "나")))));
+        when(client.fetchSyncList(eq(2), eq(2), any())).thenAnswer(returning(LIST,
+                page(2, 2, 5, List.of(item("3", "1", "VE03", "다"),
+                        item("4", "1", "VE03", "라")))));
+        when(client.fetchSyncList(eq(3), eq(2), any())).thenAnswer(returning(LIST,
+                page(3, 2, 5, List.of(item("5", "1", "VE03", "마")))));
         givenDetails();
 
         // 앞 실행이 쪽 번호를 남겼어도 무시하고 처음부터 훑음
@@ -121,7 +127,7 @@ class PetTourCollectorTest {
 
         collector(2, 10).collect(context, chunks::add);
 
-        verify(client, times(3)).fetchSyncList(anyInt(), anyInt());
+        verify(client, times(3)).fetchSyncList(anyInt(), anyInt(), any());
         assertThat(context.countOf(LIST)).isEqualTo(3);
         assertThat(context.cursorOf(LIST)).isNull();
     }
@@ -132,12 +138,12 @@ class PetTourCollectorTest {
         Map<String, Object> raw = item("1059479", "1", "VE03", "여의도한강공원");
         givenList(page(1, 10, 1, List.of(raw)));
 
-        when(client.fetchPetTourDetail("1059479"))
-                .thenReturn(Map.of("acmpyTypeCd", "전구역 동반가능"));
-        when(client.fetchCommonDetail("1059479"))
-                .thenReturn(Map.of("overview", "설명"));
-        when(client.fetchIntroDetail("1059479", "12"))
-                .thenReturn(Map.of("restdate", "연중무휴"));
+        when(client.fetchPetTourDetail(eq("1059479"), any()))
+                .thenAnswer(returning(PET_TOUR, Map.of("acmpyTypeCd", "전구역 동반가능")));
+        when(client.fetchCommonDetail(eq("1059479"), any()))
+                .thenAnswer(returning(COMMON, Map.of("overview", "설명")));
+        when(client.fetchIntroDetail(eq("1059479"), eq("12"), any()))
+                .thenAnswer(returning(INTRO, Map.of("restdate", "연중무휴")));
 
         CollectionContext context = freshContext();
         collector(10, 10).collect(context, chunks::add);
@@ -166,14 +172,16 @@ class PetTourCollectorTest {
         Map<String, Object> raw = item("1", "1", "VE03", "가");
         raw.remove("contenttypeid");
         givenList(page(1, 10, 1, List.of(raw)));
-        when(client.fetchPetTourDetail(anyString())).thenReturn(Map.of());
-        when(client.fetchCommonDetail(anyString())).thenReturn(Map.of());
+        when(client.fetchPetTourDetail(anyString(), any()))
+                .thenAnswer(returning(PET_TOUR, Map.of()));
+        when(client.fetchCommonDetail(anyString(), any()))
+                .thenAnswer(returning(COMMON, Map.of()));
 
         CollectionContext context = freshContext();
         collector(10, 10).collect(context, chunks::add);
 
         // 필수 값이 빠진 요청은 반드시 거절당하므로 부르면 허용량만 버림
-        verify(client, never()).fetchIntroDetail(anyString(), any());
+        verify(client, never()).fetchIntroDetail(anyString(), any(), any());
         assertThat(context.countOf(INTRO)).isZero();
         assertThat(chunks.get(0).get(0).payload()).containsKey("intro");
     }
@@ -218,8 +226,8 @@ class PetTourCollectorTest {
         assertThat(chunks.get(0))
                 .extracting(RawDocumentDraft::sourceId)
                 .containsExactly("3", "4");
-        verify(client, never()).fetchPetTourDetail("1");
-        verify(client, never()).fetchPetTourDetail("2");
+        verify(client, never()).fetchPetTourDetail(eq("1"), any());
+        verify(client, never()).fetchPetTourDetail(eq("2"), any());
     }
 
     @Test
@@ -251,7 +259,8 @@ class PetTourCollectorTest {
                 item("1", "1", "VE03", "가"), item("2", "1", "VE03", "나"),
                 item("3", "1", "VE03", "다"))));
         givenDetails();
-        when(client.fetchCommonDetail("2")).thenThrow(new IllegalStateException("소스 오류"));
+        when(client.fetchCommonDetail(eq("2"), any()))
+                .thenAnswer(failing(COMMON, new IllegalStateException("소스 오류")));
 
         CollectionContext context = freshContext();
         collector(10, 10).collect(context, chunks::add);
@@ -273,8 +282,10 @@ class PetTourCollectorTest {
                 item("3", "1", "VE03", "다"), item("4", "1", "VE03", "라"),
                 item("5", "1", "VE03", "마"))));
         givenDetails();
-        when(client.fetchPetTourDetail("2")).thenThrow(new IllegalStateException("소스 오류"));
-        when(client.fetchPetTourDetail("3")).thenThrow(new IllegalStateException("소스 오류"));
+        when(client.fetchPetTourDetail(eq("2"), any()))
+                .thenAnswer(failing(PET_TOUR, new IllegalStateException("소스 오류")));
+        when(client.fetchPetTourDetail(eq("3"), any()))
+                .thenAnswer(failing(PET_TOUR, new IllegalStateException("소스 오류")));
 
         CollectionContext context = freshContext();
 
@@ -287,7 +298,33 @@ class PetTourCollectorTest {
         assertThat(chunks.get(0)).extracting(RawDocumentDraft::sourceId).containsExactly("1");
         assertThat(context.cursorOf(PET_TOUR)).isEqualTo("1");
         assertThat(context.skipped()).containsExactly("2", "3");
-        verify(client, never()).fetchPetTourDetail("4");
+        verify(client, never()).fetchPetTourDetail(eq("4"), any());
+    }
+
+    @Test
+    @DisplayName("고쳐야 하는 오류는 건너뛰지 않고 모아 둔 것을 넘긴 뒤 멈춘다")
+    void stopsImmediatelyOnPermanentError() {
+        givenList(page(1, 10, 5, List.of(
+                item("1", "1", "VE03", "가"), item("2", "1", "VE03", "나"),
+                item("3", "1", "VE03", "다"), item("4", "1", "VE03", "라"),
+                item("5", "1", "VE03", "마"))));
+        givenDetails();
+        when(client.fetchPetTourDetail(eq("3"), any())).thenAnswer(failing(PET_TOUR,
+                new PermanentSourceErrorException(PET_TOUR, "30", "등록되지 않은 인증키")));
+
+        CollectionContext context = freshContext();
+
+        assertThatThrownBy(() -> collector(10, 2).collect(context, chunks::add))
+                .isInstanceOf(PermanentSourceErrorException.class);
+
+        // 다음 항목도 반드시 같은 결과라 건너뛰며 이어 가면 남은 대상을 헛되이 부름
+        assertThat(context.skipped()).isEmpty();
+        verify(client, never()).fetchPetTourDetail(eq("4"), any());
+
+        // 먼저 받은 것은 살려서 넘겨야 함
+        assertThat(chunks).hasSize(1);
+        assertThat(chunks.get(0)).extracting(RawDocumentDraft::sourceId).containsExactly("1", "2");
+        assertThat(context.cursorOf(PET_TOUR)).isEqualTo("2");
     }
 
     @Test
@@ -297,7 +334,8 @@ class PetTourCollectorTest {
                 item("1", "1", "VE03", "가"), item("2", "1", "VE03", "나"),
                 item("3", "1", "VE03", "다"))));
         givenDetails();
-        when(client.fetchIntroDetail("3", "12")).thenThrow(new QuotaExhaustedException(INTRO));
+        when(client.fetchIntroDetail(eq("3"), eq("12"), any()))
+                .thenAnswer(failing(INTRO, new QuotaExhaustedException(INTRO)));
 
         CollectionContext context = freshContext();
 
@@ -321,7 +359,7 @@ class PetTourCollectorTest {
 
         // 1단계는 아무것도 저장하지 않음, 목록만 담긴 행이 생기면 뒤에 받은 상세를 지움
         assertThat(chunks).isEmpty();
-        verify(client, never()).fetchPetTourDetail(anyString());
+        verify(client, never()).fetchPetTourDetail(anyString(), any());
     }
 
     @Test
@@ -354,7 +392,10 @@ class PetTourCollectorTest {
      * 목록이 한 쪽으로 끝나는 경우에 씁니다.
      */
     private void givenList(PetTourListPage page) {
-        when(client.fetchSyncList(anyInt(), anyInt())).thenReturn(page);
+        when(client.fetchSyncList(anyInt(), anyInt(), any())).thenAnswer(invocation -> {
+            recordAttempt(invocation, LIST);
+            return page;
+        });
     }
 
     /**
@@ -364,9 +405,47 @@ class PetTourCollectorTest {
      * 개별 시험이 필요한 항목만 위에서 다시 지정합니다.
      */
     private void givenDetails() {
-        lenient().when(client.fetchPetTourDetail(anyString())).thenReturn(Map.of());
-        lenient().when(client.fetchCommonDetail(anyString())).thenReturn(Map.of());
-        lenient().when(client.fetchIntroDetail(anyString(), any())).thenReturn(Map.of());
+        lenient().when(client.fetchPetTourDetail(anyString(), any()))
+                .thenAnswer(returning(PET_TOUR, Map.of()));
+        lenient().when(client.fetchCommonDetail(anyString(), any()))
+                .thenAnswer(returning(COMMON, Map.of()));
+        lenient().when(client.fetchIntroDetail(anyString(), any(), any()))
+                .thenAnswer(returning(INTRO, Map.of()));
+    }
+
+    /**
+     * 값을 돌려주기 전에 기록 통로를 부릅니다.
+     *
+     * 실물 클라이언트가 요청을 내보낼 때마다 그것을 부르므로 시늉도 같아야 합니다.
+     * 부르지 않으면 호출 수가 0 으로 남아 이 클래스의 확인이 헛돕니다.
+     */
+    private <T> Answer<T> returning(String operation, T result) {
+        return invocation -> {
+            recordAttempt(invocation, operation);
+            return result;
+        };
+    }
+
+    /**
+     * 기록 통로를 부른 뒤 실패시킵니다.
+     *
+     * 응답을 못 받았어도 요청은 이미 나간 것이라 허용량을 씁니다.
+     * 실물이 그렇게 세므로 시늉도 같아야 합니다.
+     */
+    private <T> Answer<T> failing(String operation, RuntimeException error) {
+        return invocation -> {
+            recordAttempt(invocation, operation);
+            throw error;
+        };
+    }
+
+    private void recordAttempt(
+            org.mockito.invocation.InvocationOnMock invocation, String operation) {
+
+        Object last = invocation.getArgument(invocation.getArguments().length - 1);
+        @SuppressWarnings("unchecked")
+        Consumer<String> onAttempt = (Consumer<String>) last;
+        onAttempt.accept(operation);
     }
 
     private CollectionContext freshContext() {

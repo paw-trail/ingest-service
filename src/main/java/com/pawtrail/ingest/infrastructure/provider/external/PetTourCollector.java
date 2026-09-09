@@ -2,6 +2,7 @@ package com.pawtrail.ingest.infrastructure.provider.external;
 
 import com.pawtrail.ingest.domain.enums.SourceType;
 import com.pawtrail.ingest.domain.exception.CollectionInterruptedException;
+import com.pawtrail.ingest.domain.exception.PermanentSourceErrorException;
 import com.pawtrail.ingest.domain.exception.QuotaExhaustedException;
 import com.pawtrail.ingest.domain.provider.CollectionContext;
 import com.pawtrail.ingest.domain.provider.SourceCollector;
@@ -16,7 +17,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -119,13 +119,15 @@ public class PetTourCollector implements SourceCollector {
         int fetched = 0;
         List<Map<String, Object>> targets = new ArrayList<>();
 
-        while (true) {
-            PetTourListPage page = client.fetchSyncList(pageNo, pageSize);
-            fetched += page.items().size();
+        // 재개 지점을 비웁니다.
+        // 앞 실행이 쪽 번호를 남겼더라도 여기서 지워집니다. 이제 쓰지 않는 값입니다.
+        // 호출 수는 건드리지 않습니다. 그것은 클라이언트가 요청마다 올립니다.
+        context.markCursor(null, PetTourApiClient.SYNC_LIST_OPERATION);
 
-            // 재개 지점을 null 로 둡니다.
-            // 앞 실행이 쪽 번호를 남겼더라도 여기서 지워집니다. 이제 쓰지 않는 값입니다.
-            context.recordCall(PetTourApiClient.SYNC_LIST_OPERATION, null);
+        while (true) {
+            PetTourListPage page =
+                    client.fetchSyncList(pageNo, pageSize, context::recordCall);
+            fetched += page.items().size();
 
             for (Map<String, Object> item : page.items()) {
                 if (!isTarget(item)) {
@@ -191,6 +193,16 @@ public class PetTourCollector implements SourceCollector {
                 flush(context, chunk, chunkSink);
                 log.info("허용량에 걸려 멈춥니다. operation={} 이번 실행 처리={}건",
                         e.getOperation(), done);
+                throw e;
+
+            } catch (PermanentSourceErrorException e) {
+                // 다음 항목도 반드시 같은 결과임
+                // 건너뛰며 이어 가면 남은 대상 전부를 헛되이 부르고 허용량을 다 씀
+                // 실행기가 이것을 예상하지 못한 오류와 같은 길로 흘려보내 FAILED 로 마감하고
+                // 재개 지점을 물려주지 않음.  고치지 않은 채로 이어받으면 같은 자리에서 또 죽음
+                flush(context, chunk, chunkSink);
+                log.error("고쳐야 하는 오류라 멈춥니다. contentId={} 이번 실행 처리={}건",
+                        contentId, done, e);
                 throw e;
 
             } catch (RuntimeException e) {
@@ -285,29 +297,33 @@ public class PetTourCollector implements SourceCollector {
      * 소개 정보만 타입을 함께 넘겨야 합니다.
      * 타입이 비어 있으면 부르지 않고 넘어갑니다.
      * 필수 값이 빠진 요청은 반드시 거절당하므로 부르면 허용량만 버립니다.
+     *
+     * 호출 수를 여기서 세지 않고 클라이언트에 맡깁니다.
+     * 클라이언트가 안에서 다시 시도하므로 요청이 한 번에 여러 번 나갈 수 있는데,
+     * 바깥에서 한 번만 세면 기록이 실제로 나간 요청 수보다 작아집니다.
+     * 그래서 요청을 내보내는 자리에서 세도록 기록 통로를 넘깁니다.
+     *
+     * 재개 지점은 여기서 건드리지 않습니다.
+     * 이 장소가 저장까지 갔는지는 아직 알 수 없고 그것은 넘기는 자리에서 정합니다.
      */
     private RawDocumentDraft fetchDetails(
             CollectionContext context, Map<String, Object> item, String contentId) {
 
         String contentTypeId = string(item, "contenttypeid");
 
-        Map<String, Object> petTour = call(context,
-                PetTourApiClient.DETAIL_PET_TOUR_OPERATION,
-                () -> client.fetchPetTourDetail(contentId));
+        Map<String, Object> petTour =
+                client.fetchPetTourDetail(contentId, context::recordCall);
         sleep(properties.callIntervalMs());
 
-        Map<String, Object> common = call(context,
-                PetTourApiClient.DETAIL_COMMON_OPERATION,
-                () -> client.fetchCommonDetail(contentId));
+        Map<String, Object> common =
+                client.fetchCommonDetail(contentId, context::recordCall);
         sleep(properties.callIntervalMs());
 
         Map<String, Object> intro = Map.of();
         if (contentTypeId == null || contentTypeId.isBlank()) {
             log.warn("타입이 없어 소개 정보를 건너뜁니다. contentId={}", contentId);
         } else {
-            intro = call(context,
-                    PetTourApiClient.DETAIL_INTRO_OPERATION,
-                    () -> client.fetchIntroDetail(contentId, contentTypeId));
+            intro = client.fetchIntroDetail(contentId, contentTypeId, context::recordCall);
             sleep(properties.callIntervalMs());
         }
 
@@ -329,25 +345,6 @@ public class PetTourCollector implements SourceCollector {
                 string(item, "title"),
                 assembler.assemble(petTour, common, intro),
                 parseModified(string(item, "modifiedtime")));
-    }
-
-    /**
-     * 한 번 부르고 그것을 기록합니다.
-     *
-     * 실패해도 기록합니다. 응답을 못 받았어도 허용량은 이미 쓴 것입니다.
-     * 빠뜨리면 다음 실행이 아직 안 썼다고 판단해 그날 몫을 날립니다.
-     *
-     * 재개 지점은 건드리지 않습니다.
-     * 이 장소가 저장까지 갔는지는 아직 알 수 없고, 그것은 넘기는 자리에서 정합니다.
-     */
-    private Map<String, Object> call(
-            CollectionContext context, String operation, Supplier<Map<String, Object>> call) {
-
-        try {
-            return call.get();
-        } finally {
-            context.recordCall(operation);
-        }
     }
 
     /**

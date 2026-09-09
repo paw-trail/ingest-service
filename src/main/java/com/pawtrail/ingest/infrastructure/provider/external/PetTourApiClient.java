@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pawtrail.common.exception.CustomException;
 import com.pawtrail.ingest.domain.exception.IngestErrorCode;
+import com.pawtrail.ingest.domain.exception.PermanentSourceErrorException;
 import com.pawtrail.ingest.domain.exception.QuotaExhaustedException;
 import com.pawtrail.ingest.infrastructure.config.IngestProperties;
 import com.pawtrail.ingest.infrastructure.provider.external.dto.PetTourListPage;
@@ -15,6 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
@@ -124,30 +126,39 @@ public class PetTourApiClient {
 
     /**
      * 목록 한 쪽을 받아 옵니다.
+     *
+     * @param onAttempt 요청을 한 번 내보낼 때마다 오퍼레이션 이름과 함께 불립니다.
+     *                  자세한 것은 callWithRetry 에 적어 두었습니다.
      */
-    public PetTourListPage fetchSyncList(int pageNo, int numOfRows) {
+    public PetTourListPage fetchSyncList(
+            int pageNo, int numOfRows, Consumer<String> onAttempt) {
+
         String query = "serviceKey=" + encodedServiceKey
                 + "&numOfRows=" + numOfRows
                 + "&pageNo=" + pageNo
                 + COMMON_QUERY;
 
         JsonNode root = callWithRetry(SYNC_LIST_OPERATION, uri(SYNC_LIST_OPERATION, query),
-                "pageNo=" + pageNo);
+                "pageNo=" + pageNo, onAttempt);
         return toPage(root);
     }
 
     /**
      * 반려동물 동반 조건을 받아 옵니다.
      */
-    public Map<String, Object> fetchPetTourDetail(String contentId) {
-        return fetchDetail(DETAIL_PET_TOUR_OPERATION, contentId, null);
+    public Map<String, Object> fetchPetTourDetail(
+            String contentId, Consumer<String> onAttempt) {
+
+        return fetchDetail(DETAIL_PET_TOUR_OPERATION, contentId, null, onAttempt);
     }
 
     /**
      * 제목과 주소와 개요를 받아 옵니다.
      */
-    public Map<String, Object> fetchCommonDetail(String contentId) {
-        return fetchDetail(DETAIL_COMMON_OPERATION, contentId, null);
+    public Map<String, Object> fetchCommonDetail(
+            String contentId, Consumer<String> onAttempt) {
+
+        return fetchDetail(DETAIL_COMMON_OPERATION, contentId, null, onAttempt);
     }
 
     /**
@@ -156,8 +167,10 @@ public class PetTourApiClient {
      * 타입마다 응답 필드가 통째로 달라 contentTypeId 를 함께 넘깁니다.
      * 그 값은 목록 항목의 contenttypeid 를 그대로 씁니다.
      */
-    public Map<String, Object> fetchIntroDetail(String contentId, String contentTypeId) {
-        return fetchDetail(DETAIL_INTRO_OPERATION, contentId, contentTypeId);
+    public Map<String, Object> fetchIntroDetail(
+            String contentId, String contentTypeId, Consumer<String> onAttempt) {
+
+        return fetchDetail(DETAIL_INTRO_OPERATION, contentId, contentTypeId, onAttempt);
     }
 
     /**
@@ -169,7 +182,8 @@ public class PetTourApiClient {
      * 부르는 쪽은 그것을 그대로 원본에 담고 표시용 본문에서 그 문단만 비웁니다.
      */
     private Map<String, Object> fetchDetail(
-            String operation, String contentId, String contentTypeId) {
+            String operation, String contentId, String contentTypeId,
+            Consumer<String> onAttempt) {
 
         String query = "serviceKey=" + encodedServiceKey
                 + "&contentId=" + contentId
@@ -177,7 +191,8 @@ public class PetTourApiClient {
                 + "&numOfRows=1&pageNo=1"
                 + COMMON_QUERY;
 
-        JsonNode root = callWithRetry(operation, uri(operation, query), "contentId=" + contentId);
+        JsonNode root = callWithRetry(
+                operation, uri(operation, query), "contentId=" + contentId, onAttempt);
         return toItem(root);
     }
 
@@ -191,12 +206,31 @@ public class PetTourApiClient {
      * 그 판단이 응답 본문에 있어 상태 코드만으로는 가릴 수 없습니다.
      * 이 서비스는 실패를 200 으로 주기도 하고 403 으로 주기도 하는데,
      * 403 일 때도 본문에 이유가 담겨 오므로 먼저 읽습니다.
+     *
+     * 끝내 실패하면 SOURCE_API_FAILED 로 바꿔 던집니다.
+     * 고쳐야 나아지는 실패는 그 전에 PermanentSourceErrorException 으로 나가므로,
+     * 이 자리까지 온 것은 언제나 "여러 번 해 봤는데 안 됨" 입니다.
+     * 부르는 쪽이 그 둘을 예외 타입만으로 가릅니다.
+     *
+     * @param onAttempt 요청을 한 번 내보낼 때마다 오퍼레이션 이름과 함께 불립니다.
+     *                  진행 기록의 호출 수가 실제로 나간 요청 수와 같아야 하기 때문입니다.
+     *                  다시 시도하면 요청이 그만큼 더 나가는데 한 번만 세면
+     *                  기록이 실제보다 작아지고, 그 값은 허용량을 얼마나 썼는지를 뜻하므로
+     *                  사람이 승인을 판단할 때 잘못된 숫자를 보게 됩니다.
+     *
+     *                  요청을 보내기 직전에 부릅니다.
+     *                  연결 자체가 실패하면 소스는 그 요청을 보지 못했을 수도 있으나
+     *                  우리 쪽에서는 구분할 방법이 없어, 적게 세는 쪽보다 안전합니다.
      */
-    private JsonNode callWithRetry(String operation, URI uri, String label) {
+    private JsonNode callWithRetry(
+            String operation, URI uri, String label, Consumer<String> onAttempt) {
+
         long backoff = properties.retryBackoffMs();
         RuntimeException last = null;
 
         for (int attempt = 0; attempt <= properties.maxRetries(); attempt++) {
+            onAttempt.accept(operation);
+
             try {
                 return call(operation, uri);
 
@@ -207,7 +241,8 @@ public class PetTourApiClient {
                 last = e;
                 logRetry(operation, label, attempt, e.getMessage());
 
-            } catch (QuotaExhaustedException | CustomException e) {
+            } catch (QuotaExhaustedException | PermanentSourceErrorException
+                     | CustomException e) {
                 // 다시 시도해도 같은 결과인 실패임
                 throw e;
 
@@ -367,9 +402,11 @@ public class PetTourApiClient {
             throw new QuotaExhaustedException(operation);
         }
         if (PERMANENT_ERROR_CODES.contains(code)) {
+            // 재시도해도 같고 다음 항목도 같음
+            // 건너뛰며 이어 가면 대상 전부를 헛되이 부르므로 부르는 쪽이 그 자리에서 접음
             log.error("고쳐야 하는 오류입니다. operation={} code={} message={}",
                     operation, code, message);
-            throw new CustomException(IngestErrorCode.SOURCE_API_FAILED);
+            throw new PermanentSourceErrorException(operation, code, message);
         }
         if (!TRANSIENT_ERROR_CODES.contains(code)) {
             log.warn("알 수 없는 오류 코드입니다. operation={} code={} message={}",
