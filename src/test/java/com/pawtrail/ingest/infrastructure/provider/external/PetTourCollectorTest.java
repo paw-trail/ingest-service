@@ -1,13 +1,20 @@
 package com.pawtrail.ingest.infrastructure.provider.external;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.pawtrail.ingest.domain.enums.RunType;
 import com.pawtrail.ingest.domain.enums.SourceType;
+import com.pawtrail.ingest.domain.exception.CollectionInterruptedException;
+import com.pawtrail.ingest.domain.exception.QuotaExhaustedException;
 import com.pawtrail.ingest.domain.model.OperationProgress;
 import com.pawtrail.ingest.domain.provider.CollectionContext;
 import com.pawtrail.ingest.domain.provider.dto.RawDocumentDraft;
@@ -15,6 +22,7 @@ import com.pawtrail.ingest.infrastructure.config.IngestProperties;
 import com.pawtrail.ingest.infrastructure.provider.external.dto.PetTourListPage;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,20 +34,27 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 /**
- * 걸러 내는 조건이 틀리면 다음 이슈에서 상세를 부를 대상이 통째로 달라집니다.
- * 상세는 건당 한 번씩 호출 허용량을 쓰므로 여드레치가 한 번에 날아갈 수 있어
- * 조건과 쪽 넘김을 테스트로 못 박아 둡니다.
+ * 이 클래스가 지키는 것은 셋입니다.
  *
- * 쪽 크기를 테스트마다 다르게 줍니다.
- * 한 쪽이 한 청크라 크기가 곧 청크 경계이고, 그 경계가 이 클래스가 확인하려는 것입니다.
+ * 걸러 내는 조건이 틀리면 상세를 부를 대상이 통째로 달라집니다.
+ * 재개 지점이 앞서 나가면 저장되지 않은 것을 건너뛰고, 뒤처지면 허용량을 다시 씁니다.
+ * 한 건이 실패했을 때의 처리가 틀리면 그날 받아 둔 것을 통째로 잃거나
+ * 반대로 남은 허용량을 헛되이 다 씁니다.
+ *
+ * 셋 다 오류를 내지 않고 조용히 어긋나므로 시험으로 못 박아 둡니다.
  */
 @ExtendWith(MockitoExtension.class)
 class PetTourCollectorTest {
 
-    private static final String OPERATION = PetTourApiClient.SYNC_LIST_OPERATION;
+    private static final String LIST = PetTourApiClient.SYNC_LIST_OPERATION;
+    private static final String PET_TOUR = PetTourApiClient.DETAIL_PET_TOUR_OPERATION;
+    private static final String COMMON = PetTourApiClient.DETAIL_COMMON_OPERATION;
+    private static final String INTRO = PetTourApiClient.DETAIL_INTRO_OPERATION;
 
     @Mock
     private PetTourApiClient client;
+
+    private final PetTourDisplayBodyAssembler assembler = new PetTourDisplayBodyAssembler();
 
     private List<List<RawDocumentDraft>> chunks;
 
@@ -51,19 +66,20 @@ class PetTourCollectorTest {
     @Test
     @DisplayName("맡은 소스는 PET_TOUR 다")
     void handlesPetTour() {
-        assertThat(collectorWith(2).source()).isEqualTo(SourceType.PET_TOUR);
+        assertThat(collector(10, 10).source()).isEqualTo(SourceType.PET_TOUR);
     }
 
     @Test
-    @DisplayName("표출 중이 아닌 것과 사후면세점은 걸러 낸다")
+    @DisplayName("표출 중이 아닌 것과 사후면세점은 대상에서 뺀다")
     void filtersHiddenAndTaxRefundShops() {
-        when(client.fetchSyncList(anyInt(), anyInt())).thenReturn(page(1, 4, 4, List.of(
+        givenList(page(1, 10, 4, List.of(
                 item("1", "1", "VE03", "여의도한강공원"),
                 item("2", "0", "VE03", "감춰진 곳"),
                 item("3", "1", "SH04", "가까운약국"),
                 item("4", "1", "AC01", "펜션"))));
+        givenDetails();
 
-        collectorWith(4).collect(freshContext(), chunks::add);
+        collector(10, 10).collect(freshContext(), chunks::add);
 
         assertThat(chunks).hasSize(1);
         assertThat(chunks.get(0))
@@ -72,82 +88,240 @@ class PetTourCollectorTest {
     }
 
     @Test
-    @DisplayName("전부 걸러져도 빈 청크를 넘겨 진행 기록이 남는다")
-    void sendsEmptyChunkToKeepProgress() {
-        when(client.fetchSyncList(anyInt(), anyInt())).thenReturn(page(1, 2, 2, List.of(
-                item("1", "1", "SH04", "가까운약국"),
-                item("2", "1", "SH04", "가나안경원"))));
+    @DisplayName("식별자 순서로 상세를 부른다")
+    void sortsTargetsByContentId() {
+        givenList(page(1, 10, 3, List.of(
+                item("999", "1", "VE03", "다"),
+                item("1000", "1", "VE03", "가"),
+                item("125266", "1", "VE03", "나"))));
+        givenDetails();
 
-        collectorWith(2).collect(freshContext(), chunks::add);
+        collector(10, 10).collect(freshContext(), chunks::add);
 
-        assertThat(chunks).hasSize(1);
-        assertThat(chunks.get(0)).isEmpty();
+        // 문자열로 견줍니다. 소스가 숫자가 아닌 식별자를 주기 시작해도 깨지지 않습니다
+        assertThat(chunks.get(0))
+                .extracting(RawDocumentDraft::sourceId)
+                .containsExactly("1000", "125266", "999");
     }
 
     @Test
-    @DisplayName("전체 건수를 다 받을 때까지 쪽을 넘긴다")
-    void pagesUntilTotalCount() {
+    @DisplayName("목록은 언제나 전량을 훑고 재개 지점을 남기지 않는다")
+    void alwaysWalksWholeListAndLeavesNoCursor() {
         when(client.fetchSyncList(1, 2)).thenReturn(page(1, 2, 5, List.of(
                 item("1", "1", "VE03", "가"), item("2", "1", "VE03", "나"))));
         when(client.fetchSyncList(2, 2)).thenReturn(page(2, 2, 5, List.of(
                 item("3", "1", "VE03", "다"), item("4", "1", "VE03", "라"))));
         when(client.fetchSyncList(3, 2)).thenReturn(page(3, 2, 5, List.of(
                 item("5", "1", "VE03", "마"))));
+        givenDetails();
 
-        collectorWith(2).collect(freshContext(), chunks::add);
+        // 앞 실행이 쪽 번호를 남겼어도 무시하고 처음부터 훑음
+        CollectionContext context = CollectionContext.resumeFrom(
+                RunType.FULL, Map.of(LIST, new OperationProgress(102, "103")));
+
+        collector(2, 10).collect(context, chunks::add);
 
         verify(client, times(3)).fetchSyncList(anyInt(), anyInt());
-        assertThat(chunks).hasSize(3);
+        assertThat(context.countOf(LIST)).isEqualTo(3);
+        assertThat(context.cursorOf(LIST)).isNull();
     }
 
     @Test
-    @DisplayName("한 쪽이 한 청크이고 넘기기 직전에 진행이 기록된다")
-    void recordsOneCallPerChunk() {
-        when(client.fetchSyncList(1, 2)).thenReturn(page(1, 2, 3, List.of(
-                item("1", "1", "VE03", "가"), item("2", "1", "VE03", "나"))));
-        when(client.fetchSyncList(2, 2)).thenReturn(page(2, 2, 3, List.of(
-                item("3", "1", "VE03", "다"))));
+    @DisplayName("한 장소마다 상세 셋을 부르고 원본에 네 열쇠로 담는다")
+    void callsThreeDetailsAndKeepsFourKeys() {
+        Map<String, Object> raw = item("1059479", "1", "VE03", "여의도한강공원");
+        givenList(page(1, 10, 1, List.of(raw)));
+
+        when(client.fetchPetTourDetail("1059479"))
+                .thenReturn(Map.of("acmpyTypeCd", "전구역 동반가능"));
+        when(client.fetchCommonDetail("1059479"))
+                .thenReturn(Map.of("overview", "설명"));
+        when(client.fetchIntroDetail("1059479", "12"))
+                .thenReturn(Map.of("restdate", "연중무휴"));
 
         CollectionContext context = freshContext();
-        List<Integer> countsWhenChunkArrived = new ArrayList<>();
-        collectorWith(2).collect(
-                context, chunk -> countsWhenChunkArrived.add(context.countOf(OPERATION)));
-
-        // 넘기기 직전에 기록하므로 첫 청크에서 이미 1 이어야 함
-        // 순서가 뒤집히면 저장이 롤백돼도 진행만 남아 이어받을 때 그 쪽을 건너뜀
-        assertThat(countsWhenChunkArrived).containsExactly(1, 2);
-        assertThat(context.cursorOf(OPERATION)).isEqualTo("3");
-    }
-
-    @Test
-    @DisplayName("앞 실행이 멈춘 자리부터 이어받는다")
-    void resumesFromPreviousCursor() {
-        when(client.fetchSyncList(7, 2)).thenReturn(page(7, 2, 14, List.of(
-                item("1", "1", "VE03", "가"), item("2", "1", "VE03", "나"))));
-
-        CollectionContext context = CollectionContext.resumeFrom(
-                RunType.INCREMENTAL, Map.of(OPERATION, new OperationProgress(1000, "7")));
-
-        collectorWith(2).collect(context, chunks::add);
-
-        verify(client, times(1)).fetchSyncList(7, 2);
-    }
-
-    @Test
-    @DisplayName("원본에 목록 항목을 열쇠 아래 그대로 담고 표시용 본문은 비운다")
-    void keepsRawItemUnderListKey() {
-        Map<String, Object> raw = item("1059479", "1", "VE03", "여의도한강공원");
-        when(client.fetchSyncList(anyInt(), anyInt())).thenReturn(page(1, 2, 1, List.of(raw)));
-
-        collectorWith(2).collect(freshContext(), chunks::add);
+        collector(10, 10).collect(context, chunks::add);
 
         RawDocumentDraft draft = chunks.get(0).get(0);
-        assertThat(draft.payload()).containsOnlyKeys("list");
+        assertThat(draft.payload()).containsOnlyKeys("list", "petTour", "common", "intro");
         assertThat(draft.payload().get("list")).isEqualTo(raw);
         assertThat(draft.displayTitle()).isEqualTo("여의도한강공원");
-        assertThat(draft.displayBody()).isNull();
+        assertThat(draft.displayBody()).isEqualTo("""
+                [동반 유형] 전구역 동반가능
+
+                [개요] 설명
+
+                [휴무일] 연중무휴""");
         assertThat(draft.sourceModified())
                 .isEqualTo(LocalDateTime.of(2026, 3, 16, 10, 35, 59));
+
+        assertThat(context.countOf(PET_TOUR)).isEqualTo(1);
+        assertThat(context.countOf(COMMON)).isEqualTo(1);
+        assertThat(context.countOf(INTRO)).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("타입이 없으면 소개 정보를 부르지 않는다")
+    void skipsIntroWhenTypeIsMissing() {
+        Map<String, Object> raw = item("1", "1", "VE03", "가");
+        raw.remove("contenttypeid");
+        givenList(page(1, 10, 1, List.of(raw)));
+        when(client.fetchPetTourDetail(anyString())).thenReturn(Map.of());
+        when(client.fetchCommonDetail(anyString())).thenReturn(Map.of());
+
+        CollectionContext context = freshContext();
+        collector(10, 10).collect(context, chunks::add);
+
+        // 필수 값이 빠진 요청은 반드시 거절당하므로 부르면 허용량만 버림
+        verify(client, never()).fetchIntroDetail(anyString(), any());
+        assertThat(context.countOf(INTRO)).isZero();
+        assertThat(chunks.get(0).get(0).payload()).containsKey("intro");
+    }
+
+    @Test
+    @DisplayName("청크가 차면 넘기고 재개 지점은 그 청크의 마지막이다")
+    void movesCursorToLastItemOfChunk() {
+        givenList(page(1, 10, 5, List.of(
+                item("1", "1", "VE03", "가"), item("2", "1", "VE03", "나"),
+                item("3", "1", "VE03", "다"), item("4", "1", "VE03", "라"),
+                item("5", "1", "VE03", "마"))));
+        givenDetails();
+
+        CollectionContext context = freshContext();
+        List<String> cursorsWhenChunkArrived = new ArrayList<>();
+        collector(10, 2).collect(
+                context, chunk -> cursorsWhenChunkArrived.add(context.cursorOf(PET_TOUR)));
+
+        // 넘기기 직전에 옮기므로 청크가 도착한 시점에 이미 그 청크의 마지막이어야 함
+        // 앞서 나가면 저장되지 않은 것을 처리한 것으로 기록해 이어받을 때 건너뜀
+        assertThat(cursorsWhenChunkArrived).containsExactly("2", "4", "5");
+        assertThat(context.cursorOf(COMMON)).isEqualTo("5");
+        assertThat(context.cursorOf(INTRO)).isEqualTo("5");
+    }
+
+    @Test
+    @DisplayName("앞 실행이 저장한 자리 다음부터 상세를 부른다")
+    void resumesAfterLastSavedContentId() {
+        givenList(page(1, 10, 4, List.of(
+                item("1", "1", "VE03", "가"), item("2", "1", "VE03", "나"),
+                item("3", "1", "VE03", "다"), item("4", "1", "VE03", "라"))));
+        givenDetails();
+
+        Map<String, OperationProgress> previous = new HashMap<>();
+        previous.put(PET_TOUR, new OperationProgress(1000, "2"));
+        previous.put(COMMON, new OperationProgress(1000, "2"));
+        previous.put(INTRO, new OperationProgress(999, "2"));
+
+        collector(10, 10).collect(
+                CollectionContext.resumeFrom(RunType.FULL, previous), chunks::add);
+
+        assertThat(chunks.get(0))
+                .extracting(RawDocumentDraft::sourceId)
+                .containsExactly("3", "4");
+        verify(client, never()).fetchPetTourDetail("1");
+        verify(client, never()).fetchPetTourDetail("2");
+    }
+
+    @Test
+    @DisplayName("셋의 재개 지점이 어긋나 있으면 가장 뒤처진 자리를 쓴다")
+    void resumesFromTheEarliestCursor() {
+        givenList(page(1, 10, 3, List.of(
+                item("1", "1", "VE03", "가"), item("2", "1", "VE03", "나"),
+                item("3", "1", "VE03", "다"))));
+        givenDetails();
+
+        Map<String, OperationProgress> previous = new HashMap<>();
+        previous.put(PET_TOUR, new OperationProgress(10, "2"));
+        previous.put(COMMON, new OperationProgress(10, "1"));
+        previous.put(INTRO, new OperationProgress(10, "2"));
+
+        collector(10, 10).collect(
+                CollectionContext.resumeFrom(RunType.FULL, previous), chunks::add);
+
+        // 다시 받는 것은 허용량을 조금 더 쓰는 일이고 비는 것은 데이터를 잃는 일임
+        assertThat(chunks.get(0))
+                .extracting(RawDocumentDraft::sourceId)
+                .containsExactly("2", "3");
+    }
+
+    @Test
+    @DisplayName("한 건이 실패하면 그 건만 건너뛰고 이어 간다")
+    void skipsFailedItemAndKeepsGoing() {
+        givenList(page(1, 10, 3, List.of(
+                item("1", "1", "VE03", "가"), item("2", "1", "VE03", "나"),
+                item("3", "1", "VE03", "다"))));
+        givenDetails();
+        when(client.fetchCommonDetail("2")).thenThrow(new IllegalStateException("소스 오류"));
+
+        CollectionContext context = freshContext();
+        collector(10, 10).collect(context, chunks::add);
+
+        assertThat(chunks.get(0))
+                .extracting(RawDocumentDraft::sourceId)
+                .containsExactly("1", "3");
+        assertThat(context.skipped()).containsExactly("2");
+
+        // 응답을 못 받았어도 허용량은 이미 쓴 것이라 호출 수는 올라야 함
+        assertThat(context.countOf(COMMON)).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("연달아 실패하면 모아 둔 것을 넘기고 스스로 멈춘다")
+    void interruptsAfterConsecutiveFailures() {
+        givenList(page(1, 10, 5, List.of(
+                item("1", "1", "VE03", "가"), item("2", "1", "VE03", "나"),
+                item("3", "1", "VE03", "다"), item("4", "1", "VE03", "라"),
+                item("5", "1", "VE03", "마"))));
+        givenDetails();
+        when(client.fetchPetTourDetail("2")).thenThrow(new IllegalStateException("소스 오류"));
+        when(client.fetchPetTourDetail("3")).thenThrow(new IllegalStateException("소스 오류"));
+
+        CollectionContext context = freshContext();
+
+        assertThatThrownBy(() -> collector(10, 10, 2).collect(context, chunks::add))
+                .isInstanceOf(CollectionInterruptedException.class)
+                .hasMessageContaining("연속 2건");
+
+        // 먼저 받은 것은 살려서 넘겨야 함, 안 그러면 이미 쓴 호출이 데이터 없이 사라짐
+        assertThat(chunks).hasSize(1);
+        assertThat(chunks.get(0)).extracting(RawDocumentDraft::sourceId).containsExactly("1");
+        assertThat(context.cursorOf(PET_TOUR)).isEqualTo("1");
+        assertThat(context.skipped()).containsExactly("2", "3");
+        verify(client, never()).fetchPetTourDetail("4");
+    }
+
+    @Test
+    @DisplayName("허용량에 걸리면 모아 둔 것을 넘기고 예외를 올려보낸다")
+    void flushesBeforeQuotaStop() {
+        givenList(page(1, 10, 3, List.of(
+                item("1", "1", "VE03", "가"), item("2", "1", "VE03", "나"),
+                item("3", "1", "VE03", "다"))));
+        givenDetails();
+        when(client.fetchIntroDetail("3", "12")).thenThrow(new QuotaExhaustedException(INTRO));
+
+        CollectionContext context = freshContext();
+
+        assertThatThrownBy(() -> collector(10, 10).collect(context, chunks::add))
+                .isInstanceOf(QuotaExhaustedException.class);
+
+        assertThat(chunks).hasSize(1);
+        assertThat(chunks.get(0)).extracting(RawDocumentDraft::sourceId).containsExactly("1", "2");
+        assertThat(context.cursorOf(PET_TOUR)).isEqualTo("2");
+        assertThat(context.cursorOf(INTRO)).isEqualTo("2");
+    }
+
+    @Test
+    @DisplayName("대상이 하나도 없으면 청크를 넘기지 않는다")
+    void sendsNothingWhenNoTargets() {
+        givenList(page(1, 10, 2, List.of(
+                item("1", "1", "SH04", "가까운약국"),
+                item("2", "1", "SH04", "가나안경원"))));
+
+        collector(10, 10).collect(freshContext(), chunks::add);
+
+        // 1단계는 아무것도 저장하지 않음, 목록만 담긴 행이 생기면 뒤에 받은 상세를 지움
+        assertThat(chunks).isEmpty();
+        verify(client, never()).fetchPetTourDetail(anyString());
     }
 
     @Test
@@ -155,21 +329,44 @@ class PetTourCollectorTest {
     void keepsGoingWhenModifiedTimeIsBroken() {
         Map<String, Object> raw = item("1", "1", "VE03", "가");
         raw.put("modifiedtime", "이상한값");
-        when(client.fetchSyncList(anyInt(), anyInt())).thenReturn(page(1, 2, 1, List.of(raw)));
+        givenList(page(1, 10, 1, List.of(raw)));
+        givenDetails();
 
-        collectorWith(2).collect(freshContext(), chunks::add);
+        collector(10, 10).collect(freshContext(), chunks::add);
 
         assertThat(chunks.get(0).get(0).sourceModified()).isNull();
     }
 
-    /**
-     * 쪽 크기가 곧 청크 크기입니다. 설정에서 한 값으로 두 곳을 함께 정합니다.
-     */
-    private PetTourCollector collectorWith(int chunkSize) {
+    private PetTourCollector collector(int listPageSize, int chunkSize) {
+        return collector(listPageSize, chunkSize, 5);
+    }
+
+    private PetTourCollector collector(
+            int listPageSize, int chunkSize, int maxConsecutiveFailures) {
+
         IngestProperties properties = new IngestProperties(
-                chunkSize, 0, 0, 1000,
-                new IngestProperties.PetTour("https://example.test", "test-only"));
-        return new PetTourCollector(client, properties);
+                chunkSize, 0, 0, 1000, maxConsecutiveFailures,
+                new IngestProperties.PetTour("https://example.test", "test-only", listPageSize));
+        return new PetTourCollector(client, assembler, properties);
+    }
+
+    /**
+     * 목록이 한 쪽으로 끝나는 경우에 씁니다.
+     */
+    private void givenList(PetTourListPage page) {
+        when(client.fetchSyncList(anyInt(), anyInt())).thenReturn(page);
+    }
+
+    /**
+     * 상세 셋이 다 빈 응답으로 오는 상황을 깔아 둡니다.
+     *
+     * 소개 정보가 등록되지 않은 콘텐츠가 실제로 있어 빈 지도가 정상 경로입니다.
+     * 개별 시험이 필요한 항목만 위에서 다시 지정합니다.
+     */
+    private void givenDetails() {
+        lenient().when(client.fetchPetTourDetail(anyString())).thenReturn(Map.of());
+        lenient().when(client.fetchCommonDetail(anyString())).thenReturn(Map.of());
+        lenient().when(client.fetchIntroDetail(anyString(), any())).thenReturn(Map.of());
     }
 
     private CollectionContext freshContext() {
@@ -188,6 +385,7 @@ class PetTourCollectorTest {
         Map<String, Object> item = new LinkedHashMap<>();
         item.put("contentid", contentId);
         item.put("showflag", showFlag);
+        item.put("contenttypeid", "12");
         item.put("lclsSystm2", category);
         item.put("title", title);
         item.put("modifiedtime", "20260316103559");

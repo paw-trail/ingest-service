@@ -1,6 +1,8 @@
 package com.pawtrail.ingest.infrastructure.provider.external;
 
 import com.pawtrail.ingest.domain.enums.SourceType;
+import com.pawtrail.ingest.domain.exception.CollectionInterruptedException;
+import com.pawtrail.ingest.domain.exception.QuotaExhaustedException;
 import com.pawtrail.ingest.domain.provider.CollectionContext;
 import com.pawtrail.ingest.domain.provider.SourceCollector;
 import com.pawtrail.ingest.domain.provider.dto.RawDocumentDraft;
@@ -9,10 +11,12 @@ import com.pawtrail.ingest.infrastructure.provider.external.dto.PetTourListPage;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -20,15 +24,28 @@ import org.springframework.stereotype.Component;
 /**
  * 한국관광공사 반려동물 동반여행 정보를 수집합니다.
  *
- * 지금은 목록까지입니다.
- * 동반 조건은 상세에만 있고 그것은 다음 이슈에서 이 클래스에 더합니다.
- * 수집기를 따로 만들지 않고 여기에 더하는 이유가 있습니다.
- * 저장은 원본을 통째로 갈아끼우므로 목록만 담는 수집기가 따로 있으면
- * 나중에 그것이 돌 때 상세로 받아 둔 것을 지웁니다.
+ * 두 단계로 돕니다.
  *
- * 그래서 지금 담기는 원본은 일부러 불완전합니다.
- * 목록 항목만 들어 있고 표시용 본문이 비어 있습니다.
- * 다음 이슈가 돌면 내용이 달라져 전부 갱신됩니다.
+ * <pre>
+ * 1단계   목록을 훑어 대상만 모읍니다. 아무것도 저장하지 않습니다
+ * 2단계   대상 하나마다 상세 셋을 부르고, 몇 건씩 모아 한 번에 저장합니다
+ * </pre>
+ *
+ * 1단계가 저장하지 않는 것이 이 구조의 핵심입니다.
+ * 목록만 담긴 행이 새로 생기지 않으므로 뒤에 받은 상세를 지우는 경로가 아예 없습니다.
+ * 도중에 멈춰도 쓴 것이 없어 되돌릴 것도 없습니다.
+ * 그리고 저장과 무관해지므로 목록을 받아 오는 크기를 저장 단위와 따로 잡을 수 있습니다.
+ *
+ * 수집기를 둘로 나누지 않은 이유가 여기 이어집니다.
+ * 저장은 원본을 통째로 갈아끼우므로 목록만 담는 수집기가 따로 있으면
+ * 그것이 돌 때 상세로 받아 둔 열쇠 셋을 지웁니다.
+ *
+ * 재개 지점을 목록의 쪽 번호가 아니라 식별자로 두는 이유도 있습니다.
+ * 목록은 날마다 흔들립니다. 이틀 사이에 전체 건수가 두 번 줄어드는 것을 실제로 봤습니다.
+ * 항목 하나가 빠지면 그 뒤가 모두 앞 쪽으로 밀리므로,
+ * 쪽 번호로 이어받으면 앞 쪽으로 밀려간 항목을 영영 건너뜁니다.
+ * 그것도 아무 신호 없이 조용히 일어납니다.
+ * 식별자로 정렬해 두면 목록이 흔들려도 이어받는 자리가 정확합니다.
  */
 @Slf4j
 @Component
@@ -42,16 +59,29 @@ public class PetTourCollector implements SourceCollector {
     //
     // 외국인에게 세금을 나중에 돌려주는 일반 매장이라 전국에 수만 곳이고
     // 실제로 약국과 안경원이 대부분입니다. 관광 목적지가 아닙니다.
-    // 표출 중인 9,691건 가운데 8,611건이 여기 해당해 빼고 나면 1,080건이 남습니다.
+    // 표출 중인 9,691건 가운데 8,611건이 여기 해당해 빼고 나면 1,079건이 남습니다.
     //
     // 소스에 이것만 빼 달라고 요청할 방법이 없어 전량을 받아 걸러 냅니다.
     // 목록은 한 번에 여러 건을 주므로 그 비용이 크지 않습니다.
     private static final String TAX_REFUND_SHOP = "SH04";
 
+    /**
+     * 한 장소에 부르는 상세 셋입니다.
+     *
+     * 재개 지점을 언제나 함께 옮깁니다.
+     * 하나라도 실패하면 그 장소를 통째로 버리므로 셋이 멈춘 자리는 늘 같습니다.
+     * 갈라 두면 어느 하나만 앞서 나가고, 그 어긋남은 다음 날 이어받을 때에야 드러납니다.
+     */
+    private static final String[] DETAIL_OPERATIONS = {
+            PetTourApiClient.DETAIL_PET_TOUR_OPERATION,
+            PetTourApiClient.DETAIL_COMMON_OPERATION,
+            PetTourApiClient.DETAIL_INTRO_OPERATION};
+
     private static final DateTimeFormatter SOURCE_TIME =
             DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
     private final PetTourApiClient client;
+    private final PetTourDisplayBodyAssembler assembler;
     private final IngestProperties properties;
 
     @Override
@@ -59,105 +89,276 @@ public class PetTourCollector implements SourceCollector {
         return SourceType.PET_TOUR;
     }
 
-    /**
-     * 목록을 쪽 단위로 받아 걸러 낸 뒤 그대로 넘깁니다.
-     *
-     * 한 쪽이 한 청크입니다.
-     * 진행 기록은 한 쪽을 받을 때마다 남고 저장은 청크마다 일어나는데,
-     * 둘의 크기가 어긋나면 한 쪽이 여러 청크에 걸칩니다.
-     * 그러면 아직 저장되지 않은 항목까지 처리한 것으로 기록되어
-     * 이어받을 때 그 자리를 건너뜁니다.
-     *
-     * 진행을 먼저 기록하고 그다음에 넘깁니다.
-     * 넘기는 쪽이 저장과 진행 기록을 한 트랜잭션으로 묶으므로,
-     * 저장이 실패하면 진행 기록도 함께 되돌아갑니다.
-     */
     @Override
     public void collect(CollectionContext context, Consumer<List<RawDocumentDraft>> chunkSink) {
-        int pageSize = properties.chunkSize();
-        int pageNo = resumePage(context);
-        int fetched = 0;
-        int kept = 0;
-
-        while (true) {
-            PetTourListPage page = client.fetchSyncList(pageNo, pageSize);
-
-            List<RawDocumentDraft> drafts = new ArrayList<>();
-            for (Map<String, Object> item : page.items()) {
-                if (isTarget(item)) {
-                    drafts.add(toDraft(item));
-                }
-            }
-
-            fetched += page.items().size();
-            kept += drafts.size();
-
-            context.recordCall(PetTourApiClient.SYNC_LIST_OPERATION, String.valueOf(pageNo + 1));
-            chunkSink.accept(drafts);
-
-            if (isLastPage(pageNo, pageSize, page.totalCount()) || page.items().isEmpty()) {
-                log.info("목록 수집을 마쳤습니다. 받은 건수={} 남긴 건수={} 전체={}",
-                        fetched, kept, page.totalCount());
-                return;
-            }
-
-            pageNo++;
-            sleep(properties.callIntervalMs());
-        }
+        List<Map<String, Object>> targets = collectTargets(context);
+        collectDetails(context, targets, chunkSink);
     }
 
     /**
-     * 어디부터 받을지 정합니다.
+     * 1단계. 목록을 처음부터 끝까지 훑어 대상만 모읍니다.
      *
-     * 앞 실행이 호출 허용량에 걸려 멈췄으면 그 자리부터 시작합니다.
-     * 처음이면 첫 쪽입니다.
+     * 언제나 전량을 훑습니다. 이어받는 실행에서도 그렇습니다.
+     * 일부만 받으면 그다음이 어디인지 정할 수 없고,
+     * 목록 호출은 하루 1,000회 가운데 열 번 남짓이라 다시 훑는 값이 쌉니다.
+     * 그 대신 새로 생긴 장소가 그날 바로 잡히고 내려간 장소도 함께 드러납니다.
+     *
+     * 재개 지점은 남기지 않습니다.
+     * 남겨 두면 아무도 읽지 않는 값이 실행 기록에 남아,
+     * 다음 사람이 그것을 보고 목록도 이어받는 줄로 오해합니다.
+     * 호출 수는 기록합니다. 그 값이 허용량을 얼마나 썼는지를 알려 줍니다.
+     *
+     * 식별자로 정렬해 돌려줍니다.
+     * 문자열로 견줍니다. 숫자로 바꾸면 진행 정도가 눈에 잘 들어오지만,
+     * 소스가 언젠가 숫자가 아닌 식별자를 주기 시작하면 그날 읽기가 통째로 깨집니다.
+     * 진행 정도는 호출 수가 이미 알려 주므로 숫자로 둘 값어치가 크지 않습니다.
      */
-    private int resumePage(CollectionContext context) {
-        String cursor = context.cursorOf(PetTourApiClient.SYNC_LIST_OPERATION);
-        if (cursor == null || cursor.isBlank()) {
-            return 1;
+    private List<Map<String, Object>> collectTargets(CollectionContext context) {
+        int pageSize = properties.petTour().listPageSize();
+        int pageNo = 1;
+        int fetched = 0;
+        List<Map<String, Object>> targets = new ArrayList<>();
+
+        while (true) {
+            PetTourListPage page = client.fetchSyncList(pageNo, pageSize);
+            fetched += page.items().size();
+
+            // 재개 지점을 null 로 둡니다.
+            // 앞 실행이 쪽 번호를 남겼더라도 여기서 지워집니다. 이제 쓰지 않는 값입니다.
+            context.recordCall(PetTourApiClient.SYNC_LIST_OPERATION, null);
+
+            for (Map<String, Object> item : page.items()) {
+                if (!isTarget(item)) {
+                    continue;
+                }
+                String contentId = string(item, "contentid");
+                if (contentId == null || contentId.isBlank()) {
+                    // 식별자가 없으면 저장할 수도 상세를 부를 수도 없음
+                    log.warn("식별자가 없는 항목을 건너뜁니다. title={}", string(item, "title"));
+                    continue;
+                }
+                targets.add(item);
+            }
+
+            if (isLastPage(pageNo, pageSize, page.totalCount()) || page.items().isEmpty()) {
+                break;
+            }
+            pageNo++;
+            sleep(properties.callIntervalMs());
         }
+
+        targets.sort(Comparator.comparing(item -> string(item, "contentid")));
+        log.info("대상을 모았습니다. 받은 건수={} 대상={}건 목록 호출={}회",
+                fetched, targets.size(),
+                context.countOf(PetTourApiClient.SYNC_LIST_OPERATION));
+        return targets;
+    }
+
+    /**
+     * 2단계. 대상 하나마다 상세 셋을 부르고 몇 건씩 모아 저장합니다.
+     *
+     * 한 건이 끝내 실패하면 그 건만 건너뛰고 이어 갑니다.
+     * 흩어진 실패는 소스 사정이라 한 건 때문에 그날 받아 둔 것을 통째로 버릴 이유가 없습니다.
+     * 그러나 연달아 실패하면 소스가 멈췄거나 우리 요청이 잘못된 것이라,
+     * 계속 부르면 남은 허용량을 전부 헛되이 씁니다. 그때는 스스로 접습니다.
+     *
+     * 허용량에 걸리면 그때까지 완성한 것을 먼저 넘기고 예외를 올려보냅니다.
+     * 넘기지 않고 던지면 이미 쓴 호출이 데이터를 남기지 못한 채 사라집니다.
+     */
+    private void collectDetails(
+            CollectionContext context,
+            List<Map<String, Object>> targets,
+            Consumer<List<RawDocumentDraft>> chunkSink) {
+
+        String cursor = resumeCursor(context);
+        List<RawDocumentDraft> chunk = new ArrayList<>();
+        int consecutiveFailures = 0;
+        int done = 0;
+
+        for (Map<String, Object> item : targets) {
+            String contentId = string(item, "contentid");
+
+            // 앞 실행이 여기까지 저장했음
+            if (cursor != null && contentId.compareTo(cursor) <= 0) {
+                continue;
+            }
+
+            RawDocumentDraft draft;
+            try {
+                draft = fetchDetails(context, item, contentId);
+
+            } catch (QuotaExhaustedException e) {
+                flush(context, chunk, chunkSink);
+                log.info("허용량에 걸려 멈춥니다. operation={} 이번 실행 처리={}건",
+                        e.getOperation(), done);
+                throw e;
+
+            } catch (RuntimeException e) {
+                // 스레드가 끊긴 것은 건너뛸 실패가 아니라 그만두라는 신호임
+                if (Thread.currentThread().isInterrupted()) {
+                    throw e;
+                }
+
+                context.recordSkip(contentId);
+                consecutiveFailures++;
+                log.warn("한 건을 건너뜁니다. contentId={} 연속={}건 원인={}",
+                        contentId, consecutiveFailures, e.toString());
+
+                if (consecutiveFailures >= properties.maxConsecutiveFailures()) {
+                    flush(context, chunk, chunkSink);
+                    throw new CollectionInterruptedException(
+                            "연속 " + consecutiveFailures + "건이 실패해 멈췄습니다."
+                                    + " 마지막 contentId=" + contentId);
+                }
+                continue;
+            }
+
+            consecutiveFailures = 0;
+            chunk.add(draft);
+            done++;
+
+            if (chunk.size() >= properties.chunkSize()) {
+                flush(context, chunk, chunkSink);
+            }
+        }
+
+        flush(context, chunk, chunkSink);
+        log.info("상세 수집을 마쳤습니다. 처리={}건 건너뜀={}건", done, context.skipped().size());
+    }
+
+    /**
+     * 모아 둔 것을 넘깁니다. 넘기기 직전에 재개 지점을 옮깁니다.
+     *
+     * 순서가 중요합니다.
+     * 받는 쪽이 저장과 진행 기록을 한 트랜잭션으로 묶으므로,
+     * 저장이 실패하면 재개 지점도 함께 되돌아갑니다.
+     *
+     * 재개 지점은 이 청크에 담긴 것의 마지막입니다.
+     * 앞서 나가면 저장되지 않은 것을 처리한 것으로 기록해 이어받을 때 건너뜁니다.
+     */
+    private void flush(
+            CollectionContext context,
+            List<RawDocumentDraft> chunk,
+            Consumer<List<RawDocumentDraft>> chunkSink) {
+
+        if (chunk.isEmpty()) {
+            return;
+        }
+        context.markCursor(chunk.get(chunk.size() - 1).sourceId(), DETAIL_OPERATIONS);
+        chunkSink.accept(new ArrayList<>(chunk));
+        chunk.clear();
+    }
+
+    /**
+     * 어디부터 이어받을지 정합니다.
+     *
+     * 셋 가운데 가장 뒤처진 자리를 씁니다.
+     * 정상이라면 셋이 같은 값이지만, 어긋나 있다면 앞선 쪽을 믿는 것이 위험합니다.
+     * 뒤처진 쪽을 쓰면 몇 건을 다시 받을 뿐이고 앞선 쪽을 쓰면 그 사이가 빕니다.
+     * 다시 받는 것은 허용량을 조금 더 쓰는 일이고 비는 것은 데이터를 잃는 일입니다.
+     *
+     * 하나라도 재개 지점이 없으면 처음부터 시작합니다.
+     * 그 오퍼레이션은 한 번도 저장까지 간 적이 없다는 뜻입니다.
+     */
+    private String resumeCursor(CollectionContext context) {
+        String earliest = null;
+        for (String operation : DETAIL_OPERATIONS) {
+            String cursor = context.cursorOf(operation);
+            if (cursor == null || cursor.isBlank()) {
+                return null;
+            }
+            if (earliest == null || cursor.compareTo(earliest) < 0) {
+                earliest = cursor;
+            }
+        }
+        return earliest;
+    }
+
+    /**
+     * 한 장소의 상세 셋을 부르고 저장할 형태로 옮깁니다.
+     *
+     * 셋 가운데 하나라도 실패하면 이 장소를 통째로 버립니다.
+     * 반쪽짜리로 담으면 내용 해시가 완성본과 달라져,
+     * 다음 전량 수집이 그것을 바뀐 것으로 보고 추출을 한 번 더 돌립니다.
+     * 그 비용이 모델 호출입니다.
+     *
+     * 소개 정보만 타입을 함께 넘겨야 합니다.
+     * 타입이 비어 있으면 부르지 않고 넘어갑니다.
+     * 필수 값이 빠진 요청은 반드시 거절당하므로 부르면 허용량만 버립니다.
+     */
+    private RawDocumentDraft fetchDetails(
+            CollectionContext context, Map<String, Object> item, String contentId) {
+
+        String contentTypeId = string(item, "contenttypeid");
+
+        Map<String, Object> petTour = call(context,
+                PetTourApiClient.DETAIL_PET_TOUR_OPERATION,
+                () -> client.fetchPetTourDetail(contentId));
+        sleep(properties.callIntervalMs());
+
+        Map<String, Object> common = call(context,
+                PetTourApiClient.DETAIL_COMMON_OPERATION,
+                () -> client.fetchCommonDetail(contentId));
+        sleep(properties.callIntervalMs());
+
+        Map<String, Object> intro = Map.of();
+        if (contentTypeId == null || contentTypeId.isBlank()) {
+            log.warn("타입이 없어 소개 정보를 건너뜁니다. contentId={}", contentId);
+        } else {
+            intro = call(context,
+                    PetTourApiClient.DETAIL_INTRO_OPERATION,
+                    () -> client.fetchIntroDetail(contentId, contentTypeId));
+            sleep(properties.callIntervalMs());
+        }
+
+        // 원본은 응답을 열쇠 아래에 그대로 둡니다.
+        //
+        // 소개 정보가 등록되지 않은 콘텐츠는 빈 지도가 들어옵니다.
+        // 그것도 그대로 담습니다. 열쇠를 빼면 받아 봤는데 없었던 것과
+        // 아예 안 불러 본 것을 나중에 구분할 수 없습니다.
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("list", item);
+        payload.put("petTour", petTour);
+        payload.put("common", common);
+        payload.put("intro", intro);
+
+        return new RawDocumentDraft(
+                SourceType.PET_TOUR,
+                contentId,
+                payload,
+                string(item, "title"),
+                assembler.assemble(petTour, common, intro),
+                parseModified(string(item, "modifiedtime")));
+    }
+
+    /**
+     * 한 번 부르고 그것을 기록합니다.
+     *
+     * 실패해도 기록합니다. 응답을 못 받았어도 허용량은 이미 쓴 것입니다.
+     * 빠뜨리면 다음 실행이 아직 안 썼다고 판단해 그날 몫을 날립니다.
+     *
+     * 재개 지점은 건드리지 않습니다.
+     * 이 장소가 저장까지 갔는지는 아직 알 수 없고, 그것은 넘기는 자리에서 정합니다.
+     */
+    private Map<String, Object> call(
+            CollectionContext context, String operation, Supplier<Map<String, Object>> call) {
+
         try {
-            return Integer.parseInt(cursor);
-        } catch (NumberFormatException e) {
-            // 우리가 넣은 값이라 닿지 않아야 하지만, 닿으면 처음부터 다시 받는 편이 안전함
-            log.warn("재개 지점을 읽지 못해 처음부터 시작합니다. cursor={}", cursor);
-            return 1;
+            return call.get();
+        } finally {
+            context.recordCall(operation);
         }
     }
 
     /**
      * 담을 항목인지 봅니다.
      *
-     * 이 판단이 틀리면 다음 이슈에서 상세를 부를 대상이 통째로 달라집니다.
-     * 상세는 건당 한 번씩 호출 허용량을 쓰므로 여드레치가 한 번에 날아갈 수 있습니다.
+     * 이 판단이 틀리면 상세를 부를 대상이 통째로 달라집니다.
+     * 상세는 건당 세 번씩 호출 허용량을 쓰므로 여러 날치가 한 번에 날아갈 수 있습니다.
      */
     private boolean isTarget(Map<String, Object> item) {
         return VISIBLE.equals(string(item, "showflag"))
                 && !TAX_REFUND_SHOP.equals(string(item, "lclsSystm2"));
-    }
-
-    /**
-     * 저장할 형태로 옮깁니다.
-     *
-     * 원본은 목록 항목을 열쇠 아래에 그대로 둡니다.
-     * 다음 이슈가 상세를 받아 오면 같은 자리에 열쇠를 더합니다.
-     *
-     * 표시용 본문은 비워 둡니다.
-     * 사람이 읽을 자연어가 조건 문구인데 그것이 상세에만 있습니다.
-     * 목록에 있는 것은 좌표와 분류 코드처럼 기계가 쓰는 값이라 원문에 담을 것이 아닙니다.
-     */
-    private RawDocumentDraft toDraft(Map<String, Object> item) {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("list", item);
-
-        return new RawDocumentDraft(
-                SourceType.PET_TOUR,
-                string(item, "contentid"),
-                payload,
-                string(item, "title"),
-                null,
-                parseModified(string(item, "modifiedtime")));
     }
 
     /**
