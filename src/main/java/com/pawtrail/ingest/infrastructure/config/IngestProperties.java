@@ -22,22 +22,20 @@ import org.springframework.validation.annotation.Validated;
  *                        앞서 나가면 아직 저장되지 않은 것을 처리한 것으로 기록해
  *                        이어받을 때 그 자리를 건너뜁니다.
  *                       이 값을 줄이면 도중에 죽었을 때 잃는 양이 줄어듭니다.
- *                       상세 수집은 한 건에 호출을 셋 쓰므로,
- *                       스무 건이면 오퍼레이션마다 스무 번이 커밋 없이 떠 있는 셈입니다.
- *                       커밋되지 않은 호출은 허용량만 쓰고 데이터는 남기지 않습니다.
+ *                       건당 호출이 있는 소스는 커밋되지 않은 호출이 허용량만 쓰고
+ *                       데이터는 남기지 않으므로 그만큼이 손해입니다.
+ *                       한 번에 다 받는 소스는 잃을 호출이 없어 트랜잭션 크기 문제일 뿐입니다.
  * @param callIntervalMs 호출 사이에 쉬는 시간입니다. 초당 제한을 피하려고 둡니다.
- *                       늘리면 청크가 도는 시간이 길어져 도중에 죽었을 때 잃는 양도 커집니다.
  * @param maxRetries     일시적인 실패에 다시 시도하는 횟수입니다.
  *                       호출 허용량 초과나 인증 오류에는 다시 시도하지 않습니다.
- *                       고쳐야 나아지는 것이라 다시 불러도 결과가 같고 허용량만 씁니다.
  * @param retryBackoffMs 다시 시도하기 전에 기다리는 시간입니다. 시도할 때마다 배로 늘어납니다.
  * @param maxConsecutiveFailures
  *                       한 건씩 건너뛰다가 몇 번 연달아 실패하면 멈출지입니다.
  *                       흩어진 실패는 소스 사정이라 그 건만 건너뛰고 계속하는 편이 낫습니다.
- *                       한 건 때문에 그날 받아 둔 것을 통째로 버릴 이유가 없습니다.
  *                       그러나 연달아 실패하면 소스가 멈췄거나 우리 요청이 잘못된 것이라,
  *                       계속 부르면 남은 허용량을 전부 헛되이 씁니다.
  * @param petTour        한국관광공사 반려동물 동반여행 서비스 접속 정보입니다.
+ * @param goCamping      한국관광공사 고캠핑 정보 조회서비스 접속 정보입니다.
  */
 @Validated
 @ConfigurationProperties(prefix = "app.ingest")
@@ -60,42 +58,66 @@ public record IngestProperties(
 
         // @NotNull 과 @Valid 를 함께 붙입니다.
         //
-        // 앞엣것이 없으면 app.ingest.pet-tour 묶음이 통째로 빠졌을 때 이 값이 null 로 들어옵니다.
+        // 앞엣것이 없으면 묶음이 통째로 빠졌을 때 이 값이 null 로 들어옵니다.
         // 그러면 기동은 되고 클라이언트를 만드는 자리에서 널 참조로 터지는데,
         // 그때는 무엇이 빠졌는지가 메시지에 안 나옵니다.
         //
         // 뒤엣것이 없으면 안쪽의 검증이 아예 돌지 않습니다.
         // 중첩된 값은 바깥에서 들여다보라고 표시해 주어야 검사됩니다.
-        // 표시가 없으면 인증키가 비어 있어도 그대로 떠서 호출이 전부 실패한 뒤에야 드러납니다.
         @NotNull(message = "app.ingest.pet-tour 설정이 필요합니다")
         @Valid
-        PetTour petTour) {
+        PetTour petTour,
+
+        @NotNull(message = "app.ingest.gocamping 설정이 필요합니다")
+        @Valid
+        GoCamping goCamping) {
 
     /**
      * @param baseUrl      서비스 경로입니다. 오퍼레이션 이름은 부르는 쪽이 붙입니다.
      * @param serviceKey   공공데이터포털 인증키입니다.
      *                     원본 그대로인 쪽을 넣습니다. 미리 인코딩된 쪽을 넣으면
-     *                     전송 시점에 한 번 더 인코딩되어 더하기 기호가 이중으로 바뀌고
-     *                     거절당합니다.
+     *                     전송 시점에 한 번 더 인코딩되어 거절당합니다.
      *                     기본값을 두지 않아 환경변수를 빠뜨리면 기동이 실패합니다.
-     *                     기본값이 있으면 빠뜨린 채로 떠서 호출이 다 실패한 뒤에야 드러납니다.
      * @param listPageSize 목록을 한 번에 몇 건씩 받을지입니다.
      *                     저장할 건수와 따로 둡니다.
      *                     목록을 훑는 단계는 대상만 고르고 아무것도 저장하지 않으므로
      *                     청크 경계와 아무 관계가 없습니다.
      *                     이 값이 실행마다 쓰는 목록 호출 수를 정합니다.
-     *                     전체가 만 건 남짓이라 백이면 백두 번이고 천이면 열한 번입니다.
-     *                     목록 허용량이 하루 천 번이므로 작게 두면 하루에 아홉 번밖에 못 돌립니다.
-     *                     목록이 먼저 도는 구조라 그것이 막히면 상세를 시험조차 할 수 없습니다.
      */
     public record PetTour(
             @NotBlank(message = "app.ingest.pet-tour.base-url 이 필요합니다")
             String baseUrl,
 
-            @NotBlank(message = "INGEST_PET_TOUR_SERVICE_KEY 환경변수가 필요합니다")
+            @NotBlank(message = "INGEST_PUBLIC_DATA_SERVICE_KEY 환경변수가 필요합니다")
             String serviceKey,
 
             @Positive(message = "app.ingest.pet-tour.list-page-size 는 양수여야 합니다")
+            int listPageSize) {
+    }
+
+    /**
+     * @param baseUrl      서비스 경로입니다.
+     *                     반려동물 동반여행 쪽과 달리 공공데이터포털 게이트웨이를 거칩니다.
+     *                     그래서 오류 코드 목록이 서로 다릅니다.
+     * @param serviceKey   공공데이터포털 인증키입니다.
+     *                     지금은 반려동물 동반여행 쪽과 같은 환경변수를 봅니다.
+     *                     포털이 계정마다 키를 하나만 주기 때문입니다.
+     *                     나중에 소스별로 계정을 나누고 싶어지면 설정에서 갈라 주면 되고
+     *                     코드는 그대로 둡니다.
+     * @param listPageSize 목록을 한 번에 몇 건씩 받을지입니다.
+     *                     이 소스는 상세 조회가 없어 이 한 번에 그날 필요한 것이 다 옵니다.
+     *                     전체가 삼천백여 건이라 넉넉히 잡으면 한 번에 끝납니다.
+     *                     2026년 9월 9일 실측에서 삼천이백으로 요청해 전량을 받았고
+     *                     7.27메가바이트에 1.2초 걸렸습니다.
+     */
+    public record GoCamping(
+            @NotBlank(message = "app.ingest.gocamping.base-url 이 필요합니다")
+            String baseUrl,
+
+            @NotBlank(message = "INGEST_PUBLIC_DATA_SERVICE_KEY 환경변수가 필요합니다")
+            String serviceKey,
+
+            @Positive(message = "app.ingest.gocamping.list-page-size 는 양수여야 합니다")
             int listPageSize) {
     }
 }

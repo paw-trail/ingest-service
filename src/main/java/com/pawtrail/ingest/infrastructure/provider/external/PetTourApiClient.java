@@ -356,8 +356,24 @@ public class PetTourApiClient {
                     .path("OpenAPI_ServiceResponse")
                     .path("cmmMsgHeader");
             String code = header.path("returnReasonCode").asText(null);
-            if (code != null) {
-                handleErrorCode(operation, code, header.path("errMsg").asText(""));
+            if (code == null) {
+                return;
+            }
+            String errMsg = header.path("errMsg").asText("");
+
+            // 일시 오류면 아무것도 던지지 않고 돌아갑니다.
+            //
+            // 이 메서드는 catch 절 안에서 불리는데, 거기서 던진 예외는
+            // 같은 try 의 다른 catch 절이 잡지 못하고 그대로 밖으로 나갑니다.
+            // 그러면 재시도가 한 번도 일어나지 않고 마지막 감싸기도 건너뜁니다.
+            // 같은 코드인데 상태 코드가 200 이냐 아니냐에 따라 처리가 갈리게 됩니다.
+            switch (classify(operation, code, errMsg)) {
+                case QUOTA -> throw new QuotaExhaustedException(operation);
+                case PERMANENT ->
+                        throw new PermanentSourceErrorException(operation, code, errMsg);
+                case TRANSIENT -> {
+                    // 부르는 쪽의 catch 가 이어져 다시 시도함
+                }
             }
         } catch (com.fasterxml.jackson.core.JsonProcessingException ignored) {
             // 본문이 JSON 이 아니면 판단할 근거가 없으므로 일시적인 실패로 봄
@@ -384,7 +400,7 @@ public class PetTourApiClient {
         // 알 수 없는 코드로 분류되어 다시 시도까지 하게 됩니다.
         JsonNode topLevelCode = root.get("resultCode");
         if (topLevelCode != null && !SUCCESS_CODE.equals(topLevelCode.asText())) {
-            handleErrorCode(operation, topLevelCode.asText(), text(root, "resultMsg"));
+            throwFor(operation, topLevelCode.asText(), text(root, "resultMsg"));
         }
 
         JsonNode header = root.path("response").path("header");
@@ -393,27 +409,73 @@ public class PetTourApiClient {
             throw new CustomException(IngestErrorCode.SOURCE_API_FAILED);
         }
         if (!SUCCESS_CODE.equals(code)) {
-            handleErrorCode(operation, code, header.path("resultMsg").asText(""));
+            throwFor(operation, code, header.path("resultMsg").asText(""));
         }
     }
 
-    private void handleErrorCode(String operation, String code, String message) {
+    /**
+     * 오류 코드가 어느 부류인지만 가리고 던지지는 않습니다.
+     *
+     * 던지는 일을 부르는 쪽에 맡기는 이유가 있습니다.
+     * 이 판정이 두 자리에서 쓰이는데 일시 오류일 때 해야 할 일이 서로 다릅니다.
+     *
+     * 응답이 200 으로 온 자리에서는 던져야 합니다.
+     * 그 자리는 try 블록 안이라 던지면 아래 catch 가 받아 다시 시도합니다.
+     *
+     * 상태 코드로 튕긴 자리에서는 던지면 안 됩니다.
+     * 그 자리가 이미 catch 절 안인데, 자바에서 catch 절 안에서 던진 예외는
+     * 같은 try 의 다른 catch 절이 잡지 못합니다.
+     * 그대로 메서드 밖으로 나가 재시도가 한 번도 일어나지 않고,
+     * 마지막 줄의 감싸기도 건너뛰어 부르는 쪽이 받는 예외 타입이 경로마다 달라집니다.
+     *
+     * 판정과 처리를 갈라 두면 어느 자리에서 무엇을 하는지가 코드에 드러납니다.
+     */
+    private ErrorKind classify(String operation, String code, String message) {
         if (QUOTA_EXCEEDED_CODE.equals(code)) {
-            throw new QuotaExhaustedException(operation);
+            return ErrorKind.QUOTA;
         }
         if (PERMANENT_ERROR_CODES.contains(code)) {
             // 재시도해도 같고 다음 항목도 같음
             // 건너뛰며 이어 가면 대상 전부를 헛되이 부르므로 부르는 쪽이 그 자리에서 접음
             log.error("고쳐야 하는 오류입니다. operation={} code={} message={}",
                     operation, code, message);
-            throw new PermanentSourceErrorException(operation, code, message);
+            return ErrorKind.PERMANENT;
         }
         if (!TRANSIENT_ERROR_CODES.contains(code)) {
+            // 모르는 코드는 일시 오류로 봅니다.
+            // 다시 시도해 보는 편이 낫고, 정말 고쳐야 하는 것이면 재시도를 다 쓰고 실패합니다.
             log.warn("알 수 없는 오류 코드입니다. operation={} code={} message={}",
                     operation, code, message);
         }
-        throw new IllegalStateException(
-                "소스 오류 operation=" + operation + " code=" + code + " message=" + message);
+        return ErrorKind.TRANSIENT;
+    }
+
+    /**
+     * 200 으로 온 실패를 예외로 바꿉니다. 어느 부류든 던집니다.
+     *
+     * 이 자리는 try 블록 안이라 일시 오류를 던져도 아래 catch 가 받아 다시 시도합니다.
+     */
+    private void throwFor(String operation, String code, String message) {
+        switch (classify(operation, code, message)) {
+            case QUOTA -> throw new QuotaExhaustedException(operation);
+            case PERMANENT -> throw new PermanentSourceErrorException(operation, code, message);
+            case TRANSIENT ->
+                    throw new IllegalStateException("소스 오류 operation=" + operation
+                            + " code=" + code + " message=" + message);
+        }
+    }
+
+    /**
+     * 오류 코드의 부류입니다.
+     *
+     * 부류마다 뒤이어 할 일이 정반대라 갈라 둡니다.
+     * 허용량 초과는 오늘 몫을 다 쓴 것이고, 영구 오류는 고쳐야 나아지며,
+     * 일시 오류만 다시 시도할 값이 있습니다.
+     */
+    private enum ErrorKind {
+        QUOTA,
+        PERMANENT,
+        TRANSIENT
     }
 
     /**
