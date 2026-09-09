@@ -3,6 +3,8 @@ package com.pawtrail.ingest.infrastructure.persistence.jpa;
 import com.pawtrail.ingest.domain.enums.DocumentStatus;
 import com.pawtrail.ingest.domain.enums.SourceType;
 import com.pawtrail.ingest.domain.model.RawDocument;
+import com.pawtrail.ingest.domain.repository.SourceModifiedView;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -32,4 +34,17 @@ public interface RawDocumentJpaRepository extends JpaRepository<RawDocument, UUI
     Page<RawDocument> findByStatusOrderByIdAsc(DocumentStatus status, Pageable pageable);
 
     long countByStatus(DocumentStatus status);
+
+    /**
+     * 증분 판단에 쓰는 두 값만 읽습니다. 원본을 읽지 않아 가볍습니다.
+     */
+    List<SourceModifiedView> findBySource(SourceType source);
+
+    /**
+     * 받아 온 시각이 이른 것부터 돌려줍니다.
+     *
+     * 시각이 같은 행이 나올 수 있어 식별자로 한 번 더 정렬합니다.
+     * 식별자가 시각 순서를 담은 uuid v7 이라 이 정렬이 받아 온 순서와 어긋나지 않습니다.
+     */
+    List<RawDocument> findBySourceOrderByFetchedAtAscIdAsc(SourceType source, Pageable pageable);
 }

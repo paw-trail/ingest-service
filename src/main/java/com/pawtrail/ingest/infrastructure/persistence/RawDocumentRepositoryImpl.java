@@ -4,6 +4,7 @@ import com.pawtrail.ingest.domain.enums.DocumentStatus;
 import com.pawtrail.ingest.domain.enums.SourceType;
 import com.pawtrail.ingest.domain.model.RawDocument;
 import com.pawtrail.ingest.domain.repository.RawDocumentRepository;
+import com.pawtrail.ingest.domain.repository.SourceModifiedView;
 import com.pawtrail.ingest.infrastructure.persistence.jpa.RawDocumentJpaRepository;
 import java.util.Collection;
 import java.util.List;
@@ -11,6 +12,7 @@ import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
@@ -53,5 +55,17 @@ public class RawDocumentRepositoryImpl implements RawDocumentRepository {
     @Override
     public List<RawDocument> findAllByIds(Collection<UUID> ids) {
         return rawDocumentJpaRepository.findAllById(ids);
+    }
+
+    @Override
+    public List<SourceModifiedView> findSourceModified(SourceType source) {
+        return rawDocumentJpaRepository.findBySource(source);
+    }
+
+    @Override
+    public List<RawDocument> findOldestFetched(SourceType source, int size) {
+        // 정렬은 메서드 이름에 있으므로 여기서는 개수만 정함
+        return rawDocumentJpaRepository
+                .findBySourceOrderByFetchedAtAscIdAsc(source, PageRequest.ofSize(size));
     }
 }

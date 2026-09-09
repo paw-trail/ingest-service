@@ -110,10 +110,11 @@ public class ChunkWriter {
      */
     @Transactional
     public void complete(
-            UUID runId, Map<String, OperationProgress> progressSnapshot, List<String> skipped) {
+            UUID runId, Map<String, OperationProgress> progressSnapshot,
+            List<String> skipped, List<String> notes) {
 
         IngestRun run = loadRun(runId);
-        run.complete(progressSnapshot, skippedNote(skipped));
+        run.complete(progressSnapshot, message(skipped, notes));
         log.info("수집을 마쳤습니다. runId={} fetched={} changed={} skipped={}",
                 runId, run.getFetchedCount(), run.getChangedCount(), sizeOf(skipped));
     }
@@ -174,6 +175,25 @@ public class ChunkWriter {
      * 건너뛴 항목은 다음 전량 수집이 알아서 다시 집으므로 따로 복구할 것은 없습니다.
      * 이 기록은 무엇이 빠졌는지 나중에 찾아볼 수 있게 하는 용도입니다.
      */
+    /**
+     * 사람이 봐야 할 문구를 한 줄로 묶습니다.
+     *
+     * 건너뛴 항목과 그 밖의 알림을 함께 담습니다.
+     * 컬럼 이름은 오류 메시지이지만 오류가 아닌 것도 들어갑니다.
+     * 무엇을 못 받았는지, 무엇이 어긋나 보이는지가 사람이 승인을 판단하는 재료입니다.
+     */
+    private String message(List<String> skipped, List<String> notes) {
+        List<String> parts = new java.util.ArrayList<>();
+        String skippedNote = skippedNote(skipped);
+        if (skippedNote != null) {
+            parts.add(skippedNote);
+        }
+        if (notes != null) {
+            parts.addAll(notes);
+        }
+        return parts.isEmpty() ? null : String.join(" | ", parts);
+    }
+
     private String skippedNote(List<String> skipped) {
         if (skipped == null || skipped.isEmpty()) {
             return null;

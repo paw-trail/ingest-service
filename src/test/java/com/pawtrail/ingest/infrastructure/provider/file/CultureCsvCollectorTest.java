@@ -212,7 +212,7 @@ class CultureCsvCollectorTest {
     private CultureCsvCollector collector(int chunkSize) {
         IngestProperties properties = new IngestProperties(
                 chunkSize, 0, 0, 1000, 5,
-                new IngestProperties.PetTour("http://localhost", "test-only", 100),
+                new IngestProperties.PetTour("http://localhost", "test-only", 100, 0),
                 new IngestProperties.GoCamping("http://localhost", "test-only", 100),
                 new IngestProperties.Culture("build/tmp/test-culture.csv"));
         return new CultureCsvCollector(reader, assembler, properties);

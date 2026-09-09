@@ -200,7 +200,7 @@ class GoCampingApiClientTest {
     private GoCampingApiClient client(int maxRetries) {
         IngestProperties properties = new IngestProperties(
                 20, 0, maxRetries, 1, 5,
-                new IngestProperties.PetTour("http://localhost", "test-only", 100),
+                new IngestProperties.PetTour("http://localhost", "test-only", 100, 0),
                 new IngestProperties.GoCamping(baseUrl(), "test-only", 3200),
                 new IngestProperties.Culture("build/tmp/test-culture.csv"));
         return new GoCampingApiClient(RestClient.builder(), new ObjectMapper(), properties);

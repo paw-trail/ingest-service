@@ -97,7 +97,10 @@ public record IngestProperties(
             String serviceKey,
 
             @Positive(message = "app.ingest.pet-tour.list-page-size 는 양수여야 합니다")
-            int listPageSize) {
+            int listPageSize,
+
+            @Min(value = 0, message = "app.ingest.pet-tour.sample-size 는 0 이상이어야 합니다")
+            int sampleSize) {
     }
 
     /**

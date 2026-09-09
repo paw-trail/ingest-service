@@ -45,15 +45,21 @@ public class IngestExecutor {
 
     private final IngestRunRepository ingestRunRepository;
     private final ChunkWriter chunkWriter;
+
+    // 증분이 서 있는 전제를 표본으로 확인합니다.
+    // 전량 수집이거나 표본 크기가 0 이면 아무것도 하지 않습니다
+    private final PetTourSampleVerifier sampleVerifier;
     private final Map<SourceType, SourceCollector> collectors;
 
     public IngestExecutor(
             IngestRunRepository ingestRunRepository,
             ChunkWriter chunkWriter,
+            PetTourSampleVerifier sampleVerifier,
             List<SourceCollector> sourceCollectors) {
 
         this.ingestRunRepository = ingestRunRepository;
         this.chunkWriter = chunkWriter;
+        this.sampleVerifier = sampleVerifier;
         this.collectors = new EnumMap<>(SourceType.class);
         sourceCollectors.forEach(collector -> {
             SourceCollector previous = this.collectors.put(collector.source(), collector);
@@ -102,7 +108,13 @@ public class IngestExecutor {
                 }
                 chunkWriter.write(runId, chunk, context.snapshot());
             });
-            chunkWriter.complete(runId, context.snapshot(), context.skipped());
+            // 수집을 끝까지 마친 실행에서만 표본을 확인합니다.
+            //
+            // 허용량으로 끊긴 실행에서 표본까지 쓰면 이어받는 날마다 또 그만큼을 쓰고,
+            // 그 몫이 진짜 대상에서 빠집니다.
+            // 아래 catch 로 흘러간 실행은 여기 닿지 않으므로 그것만으로 조건이 됩니다.
+            List<String> notes = sampleVerifier.verify(context);
+            chunkWriter.complete(runId, context.snapshot(), context.skipped(), notes);
 
         } catch (QuotaExhaustedException e) {
             // 실패가 아님. 대상이 한도보다 많아 한 번에 못 끝내는 것이 정상임

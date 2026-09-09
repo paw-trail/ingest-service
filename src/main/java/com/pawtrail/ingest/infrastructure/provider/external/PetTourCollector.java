@@ -1,5 +1,6 @@
 package com.pawtrail.ingest.infrastructure.provider.external;
 
+import com.pawtrail.ingest.domain.enums.RunType;
 import com.pawtrail.ingest.domain.enums.SourceType;
 import com.pawtrail.ingest.domain.exception.CollectionInterruptedException;
 import com.pawtrail.ingest.domain.exception.PermanentSourceErrorException;
@@ -7,12 +8,15 @@ import com.pawtrail.ingest.domain.exception.QuotaExhaustedException;
 import com.pawtrail.ingest.domain.provider.CollectionContext;
 import com.pawtrail.ingest.domain.provider.SourceCollector;
 import com.pawtrail.ingest.domain.provider.dto.RawDocumentDraft;
+import com.pawtrail.ingest.domain.repository.RawDocumentRepository;
+import com.pawtrail.ingest.domain.repository.SourceModifiedView;
 import com.pawtrail.ingest.infrastructure.config.IngestProperties;
 import com.pawtrail.ingest.infrastructure.provider.external.dto.PetTourListPage;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -80,9 +84,15 @@ public class PetTourCollector implements SourceCollector {
     private static final DateTimeFormatter SOURCE_TIME =
             DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
+    private static final SourceType SOURCE = SourceType.PET_TOUR;
+
     private final PetTourApiClient client;
     private final PetTourDisplayBodyAssembler assembler;
     private final IngestProperties properties;
+
+    // 증분이 상세를 부를지 판단하려면 담아 둔 수정 시각을 봐야 합니다.
+    // 전량 수집일 때는 쓰지 않습니다
+    private final RawDocumentRepository rawDocumentRepository;
 
     @Override
     public SourceType source() {
@@ -150,10 +160,67 @@ public class PetTourCollector implements SourceCollector {
         }
 
         targets.sort(Comparator.comparing(item -> string(item, "contentid")));
-        log.info("대상을 모았습니다. 받은 건수={} 대상={}건 목록 호출={}회",
-                fetched, targets.size(),
+
+        int all = targets.size();
+        if (context.runType() == RunType.INCREMENTAL) {
+            targets = keepChanged(targets);
+        }
+
+        log.info("대상을 모았습니다. 받은 건수={} 대상={}건(전체 {}건) 목록 호출={}회",
+                fetched, targets.size(), all,
                 context.countOf(PetTourApiClient.SYNC_LIST_OPERATION));
         return targets;
+    }
+
+    /**
+     * 바뀐 것만 남깁니다.
+     *
+     * 목록이 알려준 수정 시각이 우리가 담아 둔 값보다 늦으면 바뀐 것으로 봅니다.
+     * 상세를 부를지 판단할 수 있는 재료가 이것뿐입니다.
+     *
+     * *내용 해시는 쓸 수 없습니다.
+     *  그 값은 상세를 다 받은 뒤에 뜨므로 부를지 말지를 정하는 데 쓰면 순서가 맞지 않습니다.
+     *  받고 나서 안 바뀐 것을 아는 것은 이미 허용량을 쓴 뒤입니다.
+     *
+     * 판단할 근거가 없으면 부르는 쪽으로 갑니다.
+     * 담아 둔 것이 없는 새 장소이거나, 어느 한쪽 시각을 읽지 못한 경우입니다.
+     * 놓치는 것보다 허용량을 조금 더 쓰는 편이 낫습니다.
+     *
+     * *이 판단이 전제 하나에 매달려 있습니다.
+     *  상세가 바뀌면 목록의 수정 시각도 바뀐다는 것인데 아직 확인되지 않았습니다.
+     *  틀리면 조건이 바뀐 것을 영영 놓치고, 그것은 이 서비스가 막으려는 헛걸음을
+     *  우리가 만드는 셈입니다.
+     *  그래서 수집이 끝난 뒤에 표본을 실제로 불러 대조하는 검증기를 따로 두었습니다.
+     */
+    private List<Map<String, Object>> keepChanged(List<Map<String, Object>> targets) {
+        Map<String, LocalDateTime> stored = new HashMap<>();
+        for (SourceModifiedView view : rawDocumentRepository.findSourceModified(SOURCE)) {
+            // 값이 비어 있을 수 있어 스트림으로 지도를 만들지 않습니다.
+            // 그렇게 하면 그 자리에서 널 참조로 끊깁니다
+            stored.put(view.getSourceId(), view.getSourceModified());
+        }
+
+        List<Map<String, Object>> changed = new ArrayList<>();
+        for (Map<String, Object> item : targets) {
+            if (isChanged(item, stored)) {
+                changed.add(item);
+            }
+        }
+        return changed;
+    }
+
+    private boolean isChanged(Map<String, Object> item, Map<String, LocalDateTime> stored) {
+        String contentId = string(item, "contentid");
+        if (!stored.containsKey(contentId)) {
+            // 처음 보는 장소
+            return true;
+        }
+        LocalDateTime storedAt = stored.get(contentId);
+        LocalDateTime listedAt = parseModified(string(item, "modifiedtime"));
+        if (storedAt == null || listedAt == null) {
+            return true;
+        }
+        return listedAt.isAfter(storedAt);
     }
 
     /**
