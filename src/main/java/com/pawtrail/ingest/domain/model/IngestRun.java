@@ -23,7 +23,7 @@ import org.hibernate.type.SqlTypes;
 /**
  * 수집 실행 기록입니다.
  *
- * 사람이 승인을 판단하는 재료이자 쿼터로 중단된 뒤 재개하는 근거입니다.
+ * 사람이 승인을 판단하는 재료이자 중단된 뒤 재개하는 근거입니다.
  *
  * BaseEntity 를 상속하지 않습니다.
  * createdAt 이 startedAt 과 사실상 같은 값이고 배치가 만드는 로그성 표입니다.
@@ -84,6 +84,11 @@ public class IngestRun {
     @Column(name = "progress", nullable = false)
     private Map<String, OperationProgress> progress;
 
+    // 사람이 봐야 할 문구임
+    //
+    // 이름은 오류 메시지이지만 오류가 아닌 것도 담음
+    // 건너뛴 항목 목록이 그렇고, 허용량으로 멈춘 것도 실패가 아님
+    // 이름을 바꾸려면 마이그레이션이 붙는데 그만한 값어치가 없어 그대로 씀
     @Column(name = "error_message", columnDefinition = "text")
     private String errorMessage;
 
@@ -129,27 +134,54 @@ public class IngestRun {
 
     /**
      * 끝까지 마쳤습니다.
+     *
+     * @param note 건너뛴 항목 안내. 없으면 null
      */
-    public void complete(Map<String, OperationProgress> progressSnapshot) {
+    public void complete(Map<String, OperationProgress> progressSnapshot, String note) {
         replaceProgress(progressSnapshot);
         this.status = RunStatus.DONE;
         this.finishedAt = LocalDateTime.now();
+        this.errorMessage = note;
     }
 
     /**
      * 일일 호출 허용량에 걸려 멈췄습니다. 실패가 아닙니다.
      *
      * 다음 실행이 progress 의 cursor 에서 이어받습니다.
+     *
+     * @param note 건너뛴 항목 안내. 없으면 null
      */
-    public void stopByQuota(Map<String, OperationProgress> progressSnapshot, String operation) {
+    public void stopByQuota(
+            Map<String, OperationProgress> progressSnapshot, String operation, String note) {
+
         replaceProgress(progressSnapshot);
         this.status = RunStatus.QUOTA_STOPPED;
         this.finishedAt = LocalDateTime.now();
-        this.errorMessage = "일일 호출 허용량 초과: " + operation;
+        this.errorMessage = join("일일 호출 허용량 초과: " + operation, note);
+    }
+
+    /**
+     * 더 진행하는 것이 낭비라고 보고 스스로 멈췄습니다. 실패가 아닙니다.
+     *
+     * 그때까지 저장한 것은 멀쩡하므로 다음 실행이 재개 지점을 물려받습니다.
+     *
+     * @param reason 왜 멈췄는지
+     * @param note   건너뛴 항목 안내. 없으면 null
+     */
+    public void interrupt(
+            Map<String, OperationProgress> progressSnapshot, String reason, String note) {
+
+        replaceProgress(progressSnapshot);
+        this.status = RunStatus.INTERRUPTED;
+        this.finishedAt = LocalDateTime.now();
+        this.errorMessage = join(reason, note);
     }
 
     /**
      * 예상하지 못한 오류로 멈췄습니다.
+     *
+     * 다음 실행이 이 재개 지점을 물려받지 않습니다.
+     * 무엇이 잘못됐는지 모르는 상태라 그대로 이어받으면 문제가 난 구간을 조용히 건너뜁니다.
      */
     public void fail(Map<String, OperationProgress> progressSnapshot, String message) {
         replaceProgress(progressSnapshot);
@@ -168,5 +200,12 @@ public class IngestRun {
      */
     private void replaceProgress(Map<String, OperationProgress> snapshot) {
         this.progress = snapshot == null ? new HashMap<>() : new HashMap<>(snapshot);
+    }
+
+    private String join(String head, String note) {
+        if (note == null || note.isBlank()) {
+            return head;
+        }
+        return head + " · " + note;
     }
 }

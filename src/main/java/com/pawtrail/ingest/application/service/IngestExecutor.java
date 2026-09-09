@@ -3,6 +3,7 @@ package com.pawtrail.ingest.application.service;
 import com.pawtrail.common.exception.CustomException;
 import com.pawtrail.ingest.domain.enums.RunStatus;
 import com.pawtrail.ingest.domain.enums.SourceType;
+import com.pawtrail.ingest.domain.exception.CollectionInterruptedException;
 import com.pawtrail.ingest.domain.exception.IngestErrorCode;
 import com.pawtrail.ingest.domain.exception.QuotaExhaustedException;
 import com.pawtrail.ingest.domain.model.IngestRun;
@@ -74,6 +75,10 @@ public class IngestExecutor {
      *
      * 예외를 밖으로 내보내지 않습니다.
      * 비동기라 받아 줄 곳이 없고, 실패는 실행 기록에 남기는 것이 우리 방식입니다.
+     *
+     * 마감하는 길이 넷입니다.
+     * 끝까지 마친 것과, 허용량에 걸린 것과, 스스로 멈춘 것과, 예상하지 못한 오류입니다.
+     * 앞의 셋은 실패가 아니며 뒤의 하나만 재개 지점을 물려주지 않습니다.
      */
     @Async
     public void execute(UUID runId) {
@@ -97,11 +102,15 @@ public class IngestExecutor {
                 }
                 chunkWriter.write(runId, chunk, context.snapshot());
             });
-            chunkWriter.complete(runId, context.snapshot());
+            chunkWriter.complete(runId, context.snapshot(), context.skipped());
 
         } catch (QuotaExhaustedException e) {
             // 실패가 아님. 대상이 한도보다 많아 한 번에 못 끝내는 것이 정상임
-            chunkWriter.stopByQuota(runId, context.snapshot(), e.getOperation());
+            chunkWriter.stopByQuota(runId, context.snapshot(), e.getOperation(), context.skipped());
+
+        } catch (CollectionInterruptedException e) {
+            // 실패가 아님. 더 부르는 것이 낭비라고 보고 수집기가 스스로 멈춘 것임
+            chunkWriter.interrupt(runId, context.snapshot(), e.getMessage(), context.skipped());
 
         } catch (Exception e) {
             log.error("수집 중 오류가 났습니다. runId={}", runId, e);
@@ -112,27 +121,31 @@ public class IngestExecutor {
     /**
      * 이 실행이 어디서부터 시작할지 정합니다.
      *
-     * 바로 앞 실행이 쿼터로 멈췄으면 그 재개 지점을 물려받습니다.
+     * 바로 앞 실행이 스스로 멈춘 것이면 그 재개 지점을 물려받습니다.
      * 물려받지 않으면 처음부터 다시 받게 되고, 이미 쓴 쿼터를 한 번 더 쓰는 셈입니다.
      * 되돌릴 수 없는 자원이라 그 낭비가 그날 몫을 통째로 날릴 수 있습니다.
      *
      * 호출 수는 물려받지 않습니다. 재개 지점만 가져옵니다.
      * 그 규칙과 근거는 CollectionContext.resumeFrom 에 적어 두었습니다.
      *
-     * 앞 실행이 끝까지 마쳤거나 실패했으면 처음부터 시작합니다.
+     * 물려받는 상태가 둘입니다.
+     * 허용량에 걸려 멈춘 것과, 연달아 실패해 수집기가 스스로 접은 것입니다.
+     * 둘 다 우리가 상황을 보고 멈춘 것이고 어디까지 저장했는지가 분명합니다.
      *
-     * 실패한 실행의 재개 지점을 쓰지 않는 이유가 있습니다.
-     * 쿼터로 멈춘 것은 우리가 예상한 정상 경로이고 어디까지 받았는지가 분명하지만,
-     * 실패는 그 자리에서 무엇이 잘못됐는지 아직 모르는 상태입니다.
+     * 실패한 실행의 재개 지점은 쓰지 않습니다.
+     * 그 자리에서 무엇이 잘못됐는지 아직 모르는 상태라
      * 그대로 이어받으면 문제가 난 구간을 조용히 건너뜁니다.
      * 이미 쓴 쿼터를 다시 쓰게 되지만, 무엇을 빠뜨렸는지 모르는 채로 두는 것보다 낫습니다.
+     *
+     * 앞 실행이 끝까지 마쳤으면 처음부터 시작합니다.
      */
     private CollectionContext buildContext(IngestRun run) {
         return ingestRunRepository.findPreviousRun(run.getSource(), run.getId())
-                .filter(previous -> previous.getStatus() == RunStatus.QUOTA_STOPPED)
+                .filter(previous -> previous.getStatus() == RunStatus.QUOTA_STOPPED
+                        || previous.getStatus() == RunStatus.INTERRUPTED)
                 .map(previous -> {
-                    log.info("앞 실행의 재개 지점을 물려받습니다. previousRunId={} progress={}",
-                            previous.getId(), previous.getProgress());
+                    log.info("앞 실행의 재개 지점을 물려받습니다. previousRunId={} status={} progress={}",
+                            previous.getId(), previous.getStatus(), previous.getProgress());
                     return CollectionContext.resumeFrom(run.getRunType(), previous.getProgress());
                 })
                 .orElseGet(() -> CollectionContext.startFresh(run.getRunType()));

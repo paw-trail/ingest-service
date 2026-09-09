@@ -48,6 +48,12 @@ public class IngestTriggerService {
      * 만들어 두고 곧바로 실패로 마감하면 아무 일도 안 한 행이 이력에 남고,
      * 그것을 재개 대상으로 착각할 여지가 생깁니다.
      *
+     * 증분 수집도 같은 자리에서 거절합니다.
+     * 아직 만들지 않은 기능인데 막지 않으면 조용히 전량 수집이 돌아
+     * 이틀치 호출 허용량을 통째로 씁니다.
+     * 부르는 쪽에서는 증분을 눌렀는데 이틀이 걸리는 것으로만 보여
+     * 그것이 버그라는 것을 알아채기 어렵습니다.
+     *
      * 같은 소스가 실행 중이면 거절합니다. 방어가 두 겹입니다.
      *
      * 먼저 조회로 걸러 냅니다. 대부분은 여기서 막히고 응답도 자연스럽습니다.
@@ -65,6 +71,11 @@ public class IngestTriggerService {
                 .anyMatch(collector -> collector.source() == source);
         if (!supported) {
             throw new CustomException(IngestErrorCode.COLLECTOR_NOT_REGISTERED);
+        }
+
+        if (runType == RunType.INCREMENTAL) {
+            log.info("증분 수집은 아직 지원하지 않습니다. source={}", source);
+            throw new CustomException(IngestErrorCode.RUN_TYPE_NOT_SUPPORTED);
         }
 
         if (ingestRunRepository.existsRunningBySource(source)) {
