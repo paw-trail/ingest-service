@@ -2,6 +2,7 @@ package com.pawtrail.ingest.domain.repository;
 
 import com.pawtrail.ingest.domain.enums.SourceType;
 import com.pawtrail.ingest.domain.model.IngestRun;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -54,4 +55,20 @@ public interface IngestRunRepository {
      * 저장소는 무엇이 있었는지만 알려줍니다.
      */
     Optional<IngestRun> findPreviousRun(SourceType source, UUID currentRunId);
+
+    /**
+     * 최근 실행을 새것부터 돌려줍니다.
+     *
+     * 사람이 승인을 판단하는 화면이 씁니다.
+     * 감지는 스케줄이 하고 실행은 사람이 승인한다는 방침이라,
+     * 무엇이 얼마나 바뀌었는지를 보고 다음 실행을 부를지 정합니다.
+     *
+     * 쪽 번호로 넘기지 않습니다.
+     * 실행은 하루에 몇 건씩 쌓이므로 한 해가 지나도 수백 건입니다.
+     * 필요해지면 그때 넣는 편이 낫습니다.
+     *
+     * @param source 이 소스만 봅니다. null 이면 전부 봅니다
+     * @param size   몇 건까지 볼지
+     */
+    List<IngestRun> findRecent(SourceType source, int size);
 }
