@@ -213,7 +213,8 @@ class GoCampingCollectorTest {
                 chunkSize, 0, 0, 1000, 5,
                 new IngestProperties.PetTour("https://example.test", "test-only", 100),
                 new IngestProperties.GoCamping(
-                        "https://example.test", "test-only", listPageSize));
+                        "https://example.test", "test-only", listPageSize),
+                new IngestProperties.Culture("build/tmp/test-culture.csv"));
         return new GoCampingCollector(client, assembler, properties);
     }
 

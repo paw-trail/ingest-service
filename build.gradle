@@ -97,6 +97,21 @@ dependencies {
     // ── API 문서 ──────────────────────────────────────────────
     implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:${springdocVersion}"
 
+    // ── CSV ───────────────────────────────────────────────────
+    // 문화정보원 파일을 읽음
+    // 값 안에 쉼표가 78,494개라 split(",") 으로는 못 가름
+    //
+    // * 직접 짜지 않는 이유
+    //   지금 파일은 필드 안 줄바꿈도 이스케이프 따옴표도 없어 30줄이면 되나
+    //   다음 판이 그럴 것이라는 보장이 없음
+    //   깨지면 컬럼 수로 알아챌 수는 있어도 고치려면 결국 파서를 다시 짜야 함
+    //
+    // * opencsv 가 아닌 이유
+    //   commons-csv 는 런타임 전이 의존성이 없고 opencsv 는 commons-lang3 등을 끌고 옴
+    //
+    // Boot BOM 이 관리하지 않아 버전을 gradle.properties 에 둠
+    implementation "org.apache.commons:commons-csv:${commonsCsvVersion}"
+
     // ── Lombok ────────────────────────────────────────────────
     compileOnly         'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'

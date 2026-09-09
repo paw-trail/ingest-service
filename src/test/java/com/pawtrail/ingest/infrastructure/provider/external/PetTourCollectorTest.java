@@ -385,7 +385,8 @@ class PetTourCollectorTest {
         IngestProperties properties = new IngestProperties(
                 chunkSize, 0, 0, 1000, maxConsecutiveFailures,
                 new IngestProperties.PetTour("https://example.test", "test-only", listPageSize),
-                new IngestProperties.GoCamping("https://example.test", "test-only", 100));
+                new IngestProperties.GoCamping("https://example.test", "test-only", 100),
+                new IngestProperties.Culture("build/tmp/test-culture.csv"));
         return new PetTourCollector(client, assembler, properties);
     }
 

@@ -93,7 +93,27 @@ public enum IngestErrorCode implements ErrorCode {
     // * 이 코드가 HTTP 응답으로 나가는 일은 거의 없음
     //   수집은 비동기라 트리거 응답은 이미 나간 뒤임
     //   그래도 코드로 두는 이유는 실행 기록에 남길 문구가 한 곳에서 나와야 하기 때문임
-    SOURCE_API_FAILED(HttpStatus.BAD_GATEWAY, "소스 API 호출에 실패했습니다.");
+    SOURCE_API_FAILED(HttpStatus.BAD_GATEWAY, "소스 API 호출에 실패했습니다."),
+
+    // 소스 파일을 열지 못함
+    //
+    // * 파일을 읽는 소스에만 해당함
+    //   문화정보원은 REST API 가 아니라 저장소에 함께 커밋한 CSV 를 읽음
+    //
+    // * 흔한 원인 둘
+    //   설정의 경로가 실행 위치와 안 맞음 (상대경로라 어디서 띄우는지에 달림)
+    //   컨테이너에 파일을 안 넣었거나 마운트 경로가 다름
+    //
+    // * 500 인 이유
+    //   사용자 요청이 잘못된 것이 아니라 우리 배포가 덜 된 것임
+    SOURCE_FILE_NOT_READABLE(HttpStatus.INTERNAL_SERVER_ERROR, "소스 파일을 읽을 수 없습니다."),
+
+    // 소스 파일의 형태가 예상과 다름
+    //
+    // 컬럼 수가 맞지 않을 때 남김
+    // 파일이 새 판으로 바뀌면서 컬럼이 늘거나 줄면 여기서 먼저 드러남
+    // 그대로 담으면 값이 한 칸씩 밀린 채로 들어가고 나중에 알아채기 어려움
+    SOURCE_FILE_MALFORMED(HttpStatus.INTERNAL_SERVER_ERROR, "소스 파일의 형태가 다릅니다.");
 
     private final HttpStatus httpStatus;
     private final String message;

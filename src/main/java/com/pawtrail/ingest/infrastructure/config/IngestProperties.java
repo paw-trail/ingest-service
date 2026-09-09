@@ -36,6 +36,7 @@ import org.springframework.validation.annotation.Validated;
  *                       계속 부르면 남은 허용량을 전부 헛되이 씁니다.
  * @param petTour        한국관광공사 반려동물 동반여행 서비스 접속 정보입니다.
  * @param goCamping      한국관광공사 고캠핑 정보 조회서비스 접속 정보입니다.
+ * @param culture        한국문화정보원 문화시설 CSV 정보입니다. 바깥을 부르지 않고 파일을 읽습니다.
  */
 @Validated
 @ConfigurationProperties(prefix = "app.ingest")
@@ -70,7 +71,11 @@ public record IngestProperties(
 
         @NotNull(message = "app.ingest.gocamping 설정이 필요합니다")
         @Valid
-        GoCamping goCamping) {
+        GoCamping goCamping,
+
+        @NotNull(message = "app.ingest.culture 설정이 필요합니다")
+        @Valid
+        Culture culture) {
 
     /**
      * @param baseUrl      서비스 경로입니다. 오퍼레이션 이름은 부르는 쪽이 붙입니다.
@@ -119,5 +124,21 @@ public record IngestProperties(
 
             @Positive(message = "app.ingest.gocamping.list-page-size 는 양수여야 합니다")
             int listPageSize) {
+    }
+
+    /**
+     * @param filePath 읽을 CSV 파일의 경로입니다.
+     *                 이 소스는 바깥을 부르지 않습니다. 저장소에 함께 커밋한 파일을 읽습니다.
+     *                 접속 정보도 인증키도 없어 경로 하나뿐입니다.
+     *
+     *                 상대경로면 애플리케이션을 띄운 자리를 기준으로 찾습니다.
+     *                 컨테이너에서는 마운트한 자리로 덮어쓰면 되고 코드는 그대로 둡니다.
+     *
+     *                 파일 이름에 날짜가 들어 있어 어느 판인지가 드러납니다.
+     *                 새 판이 나오면 파일을 바꾸고 이 값의 날짜만 고칩니다.
+     */
+    public record Culture(
+            @NotBlank(message = "app.ingest.culture.file-path 가 필요합니다")
+            String filePath) {
     }
 }
