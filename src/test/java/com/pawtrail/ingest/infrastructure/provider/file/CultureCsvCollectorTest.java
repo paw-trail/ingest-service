@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -194,8 +195,18 @@ class CultureCsvCollectorTest {
         assertThat(chunks).isEmpty();
     }
 
+    /**
+     * 읽는 쪽이 행을 하나씩 넘기는 것을 흉내 냅니다.
+     *
+     * 실물 리더가 목록을 만들지 않고 행마다 콜백을 부르므로 시늉도 같아야 합니다.
+     * 그래야 수집기가 읽는 도중에 거르는 것을 그대로 확인합니다.
+     */
     private void given(List<Map<String, String>> rows) {
-        when(reader.read(any())).thenReturn(rows);
+        when(reader.read(any(), any())).thenAnswer(invocation -> {
+            Consumer<Map<String, String>> rowSink = invocation.getArgument(1);
+            rows.forEach(rowSink);
+            return rows.size();
+        });
     }
 
     private CultureCsvCollector collector(int chunkSize) {

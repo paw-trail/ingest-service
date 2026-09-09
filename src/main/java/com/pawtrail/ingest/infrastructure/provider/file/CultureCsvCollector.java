@@ -10,8 +10,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -27,23 +27,28 @@ import org.springframework.stereotype.Component;
  * 소스가 저장소에 함께 커밋한 파일이라 호출 허용량도 재시도도 재개 지점도 없습니다.
  *
  * <pre>
- * 파일을 읽어 ─→ 완전 중복 제거 ─→ 대상 필터 ─→ 같은 키는 최신만 ─→ 청크로 저장
- *   70,650        23,980        13,436        13,408
+ * 행 하나씩 받아 ─→ 완전 중복 버리기 ─→ 대상 아니면 버리기 ─→ 같은 키는 최신만
+ *   70,650              23,980              13,436            13,408
  * </pre>
  *
- * 거르는 단계가 셋인 이유가 있습니다.
+ * 거르는 판정이 셋인 이유가 있습니다.
  *
  * 첫째는 전 컬럼이 똑같은 행이 46,670개 있기 때문입니다.
- * 우리동물병원 마흔 곳이 각각 마흔 번씩 복제된 식이며 좌표까지 같습니다.
+ * 한 동물병원이 마흔 번씩 복제된 식이며 좌표까지 같습니다.
  *
  * 둘째는 담을 것을 고르기 때문입니다.
  * 동물약국과 미용실과 위탁관리는 담지 않습니다. 화면에 그 카테고리가 없습니다.
  *
  * 셋째가 이번에 파일을 열다 찾은 것입니다.
  * 같은 장소의 2022년 판과 2025년 판이 둘 다 남아 있고 작성일만 다릅니다.
- * 전 컬럼 동일 판정에 걸리지 않아 첫 단계를 그냥 지나갑니다.
- * 지우지 않으면 둘이 같은 식별자라 뒤에 오는 행이 앞을 덮어쓰는데,
+ * 전 컬럼 동일 판정에 걸리지 않아 첫 판정을 그냥 지나갑니다.
+ * 버리지 않으면 둘이 같은 식별자라 뒤에 오는 행이 앞을 덮어쓰는데,
  * 그러면 어느 판이 남을지가 파일에 적힌 순서에 달립니다.
+ *
+ * *셋을 읽는 도중에 함께 판정합니다.
+ *  단계마다 목록을 만들면 7만 행을 통째로 들고 있게 되어 이백 메가바이트에 가깝습니다.
+ *  읽으면서 버리면 남는 것이 본 것을 기억하는 집합과 최종 만 삼천 행뿐입니다.
+ *  판정하는 메서드는 여전히 셋으로 나뉘어 있어 하나씩 따로 확인할 수 있습니다.
  */
 @Slf4j
 @Component
@@ -61,9 +66,6 @@ public class CultureCsvCollector implements SourceCollector {
             "여행지", "박물관", "미술관", "문예회관", "펜션", "호텔", "카페", "식당",
             "반려문화시설", "동물병원", "반려동물용품");
 
-    /**
-     * 세부 분류가 비어 있을 때 대신 보는 컬럼입니다.
-     */
     private static final String CATEGORY_COLUMN = "카테고리3";
     private static final String FALLBACK_CATEGORY_COLUMN = "카테고리2";
 
@@ -98,15 +100,12 @@ public class CultureCsvCollector implements SourceCollector {
         // 파일 읽기를 지어낸 이름으로 세면 그 값의 뜻이 깨집니다.
         // 얼마나 담았는지는 실행 기록의 건수 두 개가 이미 보여줍니다.
 
-        List<Map<String, String>> rows = reader.read(Path.of(properties.culture().filePath()));
-        reportUnknownColumns(rows);
-
-        List<Map<String, String>> distinct = removeExactDuplicates(rows);
-        List<Map<String, String>> targets = filterTargets(distinct);
-        Map<String, Map<String, String>> latest = keepLatestPerKey(targets);
+        Sifter sifter = new Sifter();
+        int read = reader.read(Path.of(properties.culture().filePath()), sifter::accept);
+        Map<String, Map<String, String>> latest = sifter.result();
 
         log.info("거르기를 마쳤습니다. 원본={} 완전중복제거={} 대상={} 최신만={}",
-                rows.size(), distinct.size(), targets.size(), latest.size());
+                read, sifter.distinctCount(), sifter.targetCount(), latest.size());
 
         List<RawDocumentDraft> chunk = new ArrayList<>();
         latest.forEach((key, row) -> {
@@ -121,58 +120,91 @@ public class CultureCsvCollector implements SourceCollector {
     }
 
     /**
-     * 전 컬럼이 똑같은 행을 걷어냅니다.
+     * 행을 하나씩 받아 걸러 냅니다.
      *
-     * 파일에 46,670개가 있습니다.
-     * 좌표까지 같은 행이 반복되므로 지우지 않으면 같은 장소가 수십 번 들어갑니다.
-     * 순서는 파일에 적힌 그대로 지킵니다. 먼저 나온 것을 남깁니다.
-     */
-    private List<Map<String, String>> removeExactDuplicates(List<Map<String, String>> rows) {
-        Set<List<String>> seen = new LinkedHashSet<>();
-        List<Map<String, String>> distinct = new ArrayList<>();
-        for (Map<String, String> row : rows) {
-            if (seen.add(List.copyOf(row.values()))) {
-                distinct.add(row);
-            }
-        }
-        return distinct;
-    }
-
-    /**
-     * 담을 세부 분류만 남깁니다.
-     */
-    private List<Map<String, String>> filterTargets(List<Map<String, String>> rows) {
-        List<Map<String, String>> targets = new ArrayList<>();
-        for (Map<String, String> row : rows) {
-            if (TARGET_CATEGORIES.contains(categoryOf(row))) {
-                targets.add(row);
-            }
-        }
-        return targets;
-    }
-
-    /**
-     * 같은 식별자에서 작성일이 가장 늦은 행만 남깁니다.
-     *
-     * 작성일이 연월일 형식이라 문자열로 견주어도 순서가 맞습니다.
-     *
-     * 작성일까지 같은 경우가 한 건 있습니다.
-     * 안산의 한 동물병원이 반려동물용품과 동물병원 두 분류로 등록돼 있습니다.
-     * 어느 쪽이 남아도 같은 장소이고 분류는 원본에 들어 있어 그대로 둡니다.
+     * 읽는 쪽이 행을 넘길 때마다 불립니다.
+     * 판정을 통과하지 못한 행은 여기서 버려지므로 그 자리에서 회수됩니다.
      *
      * 순서를 지키는 지도를 씁니다.
      * 저장하는 차례가 실행마다 달라지면 무엇이 바뀌었는지 세는 값도 함께 흔들립니다.
      */
-    private Map<String, Map<String, String>> keepLatestPerKey(List<Map<String, String>> rows) {
-        Map<String, Map<String, String>> latest = new LinkedHashMap<>();
-        for (Map<String, String> row : rows) {
+    private final class Sifter {
+
+        /**
+         * 이미 본 행입니다. 전 컬럼이 똑같은 것을 걸러 냅니다.
+         *
+         * 값을 그대로 들고 있지만 문자열 자체는 지도와 함께 쓰이므로
+         * 여기서 더 드는 것은 목록 껍데기뿐입니다.
+         */
+        private final Set<List<String>> seen = new HashSet<>();
+
+        private final Map<String, Map<String, String>> latest = new LinkedHashMap<>();
+
+        private int distinctCount;
+        private int targetCount;
+        private boolean columnsChecked;
+
+        void accept(Map<String, String> row) {
+            reportUnknownColumnsOnce(row);
+
+            if (!seen.add(List.copyOf(row.values()))) {
+                return;
+            }
+            distinctCount++;
+
+            if (!TARGET_CATEGORIES.contains(categoryOf(row))) {
+                return;
+            }
+            targetCount++;
+
+            keepIfLatest(row);
+        }
+
+        /**
+         * 같은 식별자에서 작성일이 가장 늦은 행만 남깁니다.
+         *
+         * 작성일이 연월일 형식이라 문자열로 견주어도 순서가 맞습니다.
+         *
+         * 작성일까지 같은 경우가 한 건 있습니다.
+         * 안산의 한 동물병원이 반려동물용품과 동물병원 두 분류로 등록돼 있습니다.
+         * 어느 쪽이 남아도 같은 장소이고 분류는 원본에 들어 있어 그대로 둡니다.
+         */
+        private void keepIfLatest(Map<String, String> row) {
             String key = sourceIdOf(row);
             Map<String, String> kept = latest.get(key);
             if (kept == null || writtenAtOf(row).compareTo(writtenAtOf(kept)) >= 0) {
                 latest.put(key, row);
             }
         }
-        return latest;
+
+        /**
+         * 사전에도 제외 목록에도 없는 컬럼을 한 번만 알립니다.
+         *
+         * 소스가 컬럼을 늘리면 그것이 조용히 빠지는데 아무 신호가 없으면 알아챌 방법이 없습니다.
+         * 행마다 확인하면 칠만 번 같은 경고가 쌓이므로 첫 행으로 한 번만 봅니다.
+         */
+        private void reportUnknownColumnsOnce(Map<String, String> row) {
+            if (columnsChecked) {
+                return;
+            }
+            columnsChecked = true;
+            List<String> unknown = assembler.unknownColumns(row);
+            if (!unknown.isEmpty()) {
+                log.warn("CSV 에 사전에 없는 컬럼이 있습니다. columns={}", unknown);
+            }
+        }
+
+        Map<String, Map<String, String>> result() {
+            return latest;
+        }
+
+        int distinctCount() {
+            return distinctCount;
+        }
+
+        int targetCount() {
+            return targetCount;
+        }
     }
 
     /**
@@ -229,7 +261,7 @@ public class CultureCsvCollector implements SourceCollector {
      * 소스가 알려 준 작성일을 읽습니다.
      *
      * 날짜만 오므로 그날 시작 시각으로 둡니다.
-     * 파일마다 형식이 다릅니다. 관광공사는 열네 자리이고 고캠핑은 날짜만입니다.
+     * 소스마다 형식이 다릅니다. 관광공사는 열네 자리이고 고캠핑은 날짜만입니다.
      */
     private LocalDateTime parseWrittenAt(String raw) {
         if (raw == null || raw.isBlank()) {
@@ -240,22 +272,6 @@ public class CultureCsvCollector implements SourceCollector {
         } catch (RuntimeException e) {
             log.warn("작성일을 읽지 못했습니다. value={}", raw);
             return null;
-        }
-    }
-
-    /**
-     * 사전에도 제외 목록에도 없는 컬럼을 한 번만 알립니다.
-     *
-     * 소스가 컬럼을 늘리면 그것이 조용히 빠지는데 아무 신호가 없으면 알아챌 방법이 없습니다.
-     * 행마다 확인하면 만 건이 넘게 같은 경고가 쌓이므로 첫 행으로 한 번만 봅니다.
-     */
-    private void reportUnknownColumns(List<Map<String, String>> rows) {
-        if (rows.isEmpty()) {
-            return;
-        }
-        List<String> unknown = assembler.unknownColumns(rows.get(0));
-        if (!unknown.isEmpty()) {
-            log.warn("CSV 에 사전에 없는 컬럼이 있습니다. columns={}", unknown);
         }
     }
 
