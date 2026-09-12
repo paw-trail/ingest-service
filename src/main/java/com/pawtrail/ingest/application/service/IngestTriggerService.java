@@ -87,6 +87,20 @@ public class IngestTriggerService {
             throw new CustomException(IngestErrorCode.RUN_TYPE_NOT_SUPPORTED);
         }
 
+        if (runType == RunType.LINK && !source.isStoredAsRawDocument()) {
+            // 넘길 문서가 아예 없는 소스임
+            //
+            // 원본을 우리 표에 담지 않고 장소 서비스로 바로 가기로 한 소스가 하나 있음
+            // 그 소스로 이 실행을 부르면 읽을 것이 없어 0 건으로 조용히 끝남
+            // 그러면 나중에 "왜 안 붙었지" 를 찾을 때 실행 기록만 보고는 알 수 없음
+            //
+            // 새 표시를 두지 않고 원본을 담는지로 판단함
+            // 담지 않으면 넘길 것도 없다는 관계가 그대로 성립하므로
+            // 둘을 따로 두면 한쪽만 고쳐 어긋날 자리가 생김
+            log.info("이 소스는 원본을 담지 않아 넘길 문서가 없습니다. source={}", source);
+            throw new CustomException(IngestErrorCode.RUN_TYPE_NOT_SUPPORTED);
+        }
+
         if (ingestRunRepository.existsRunningBySource(source)) {
             throw new CustomException(IngestErrorCode.INGEST_ALREADY_RUNNING);
         }
