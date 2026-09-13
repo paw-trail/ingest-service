@@ -266,12 +266,12 @@ class CultureCsvCollectorTest {
      * 실물 리더가 목록을 만들지 않고 행마다 콜백을 부르므로 시늉도 같아야 합니다.
      * 그래야 수집기가 읽는 도중에 거르는 것을 그대로 확인합니다.
      *
-     * 리더가 인코딩과 컬럼 수를 함께 받게 되어 콜백이 네 번째 인자입니다.
-     * 소스가 둘이 되면서 읽는 쪽을 하나로 합쳤고 그 셋만 값으로 갈립니다.
+     * 리더가 인코딩과 컬럼 수와 필수 컬럼을 함께 받게 되어 콜백이 다섯 번째 인자입니다.
+     * 소스가 둘이 되면서 읽는 쪽을 하나로 합쳤고 그 넷만 값으로 갈립니다.
      */
     private void given(List<Map<String, String>> rows) {
-        when(reader.read(any(), any(), anyInt(), any())).thenAnswer(invocation -> {
-            Consumer<Map<String, String>> rowSink = invocation.getArgument(3);
+        when(reader.read(any(), any(), anyInt(), any(), any())).thenAnswer(invocation -> {
+            Consumer<Map<String, String>> rowSink = invocation.getArgument(4);
             rows.forEach(rowSink);
             return rows.size();
         });

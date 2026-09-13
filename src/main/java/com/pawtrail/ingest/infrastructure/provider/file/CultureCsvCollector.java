@@ -7,6 +7,7 @@ import com.pawtrail.ingest.domain.provider.dto.RawDocumentDraft;
 import com.pawtrail.ingest.infrastructure.config.IngestProperties;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.Set;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -108,6 +109,15 @@ public class CultureCsvCollector implements SourceCollector {
      */
     private static final int COLUMN_COUNT = 31;
 
+    /**
+     * 없으면 읽기를 접을 컬럼입니다.
+     *
+     * 식별자를 만드는 둘입니다.
+     * 이름이 바뀌면 키가 통째로 달라져 담아 둔 것이 전부 고아가 됩니다.
+     * 그런데 오류가 나지 않아 다시 담길 뿐 아무도 알아채지 못합니다.
+     */
+    private static final Set<String> REQUIRED_COLUMNS = Set.of("시설명", "지번주소");
+
     private final CsvReader reader;
     private final CultureDisplayBodyAssembler assembler;
     private final IngestProperties properties;
@@ -131,6 +141,7 @@ public class CultureCsvCollector implements SourceCollector {
                 Path.of(properties.culture().filePath()),
                 StandardCharsets.UTF_8,
                 COLUMN_COUNT,
+                REQUIRED_COLUMNS,
                 sifter::accept);
         Map<String, Map<String, String>> latest = sifter.result();
 

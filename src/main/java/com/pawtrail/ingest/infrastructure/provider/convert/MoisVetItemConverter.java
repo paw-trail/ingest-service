@@ -4,6 +4,7 @@ import com.pawtrail.ingest.domain.enums.SourceType;
 import com.pawtrail.ingest.domain.provider.PlaceItemConverter;
 import com.pawtrail.ingest.domain.provider.dto.PlaceBulkItem;
 import java.util.Map;
+import java.util.regex.Pattern;
 import org.springframework.stereotype.Component;
 
 /**
@@ -33,7 +34,11 @@ public class MoisVetItemConverter implements PlaceItemConverter {
     private static final String COORD_X = "좌표정보(X)";
     private static final String COORD_Y = "좌표정보(Y)";
 
-    // 지역번호가 붙어 있는 번호의 길이입니다
+    // 쓸 수 있는 전화번호의 모양입니다
+    //
+    // 0 으로 시작하는 열 자리나 열한 자리입니다.
+    // 국내 번호가 전부 0 으로 시작하므로 그것을 함께 봅니다.
+    // 길이만 보면 사업자번호 같은 열 자리 숫자가 그대로 통과합니다.
     //
     // 실측에서 여덟 자리와 아홉 자리가 511 건 나왔는데 지역번호가 빠진 것입니다.
     // "36728441" 은 서울 국번만 있어 그대로 걸 수 없습니다.
@@ -41,8 +46,14 @@ public class MoisVetItemConverter implements PlaceItemConverter {
     //
     // 문화정보원이 전화를 96.7% 주고 형식도 정상이라 그쪽이 대부분을 채웁니다.
     // 받는 쪽이 빈 칸만 메우므로 이 값은 그쪽에 없는 병원에만 들어갑니다.
-    private static final int MIN_TEL_LENGTH = 10;
-    private static final int MAX_TEL_LENGTH = 11;
+    private static final Pattern TEL_FORMAT = Pattern.compile("0\\d{9,10}");
+
+    // 번호에서 걷어낼 구분자입니다
+    //
+    // 숫자가 아닌 것을 전부 지우면 "02-1234-5678 내선 9" 가 열한 자리로 통과합니다.
+    // 실측 파일에는 하이픈도 안내 문구도 없었으나 다음 판이 그럴 보장이 없습니다.
+    // 구분자만 지우고 나머지가 남아 있으면 모양 검사에서 걸러집니다.
+    private static final Pattern SEPARATORS = Pattern.compile("[-.()\\s]");
 
     @Override
     public SourceType source() {
@@ -113,7 +124,10 @@ public class MoisVetItemConverter implements PlaceItemConverter {
     /**
      * 지역번호까지 갖춘 번호만 남깁니다.
      *
-     * 하이픈을 넣지 않습니다.
+     * 구분자만 걷어내고 모양을 봅니다.
+     * 숫자가 아닌 것을 전부 지우면 안내 문구가 섞인 값이 길이만 맞아 통과합니다.
+     *
+     * 하이픈을 다시 넣지는 않습니다.
      * 어디에 넣을지는 지역번호 자릿수를 알아야 정해지고 그것은 표시 형식입니다.
      * 화면이 정할 일이라 숫자 그대로 보냅니다.
      */
@@ -121,11 +135,8 @@ public class MoisVetItemConverter implements PlaceItemConverter {
         if (raw == null) {
             return null;
         }
-        String digits = raw.replaceAll("[^0-9]", "");
-        if (digits.length() < MIN_TEL_LENGTH || digits.length() > MAX_TEL_LENGTH) {
-            return null;
-        }
-        return digits;
+        String cleaned = SEPARATORS.matcher(raw).replaceAll("");
+        return TEL_FORMAT.matcher(cleaned).matches() ? cleaned : null;
     }
 
     /**

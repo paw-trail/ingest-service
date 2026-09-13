@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -75,6 +76,19 @@ public class MoisVetDirectExecutor {
 
     private static final String STATUS_COLUMN = "영업상태명";
     private static final String ID_COLUMN = "관리번호";
+    private static final String NAME_COLUMN = "사업장명";
+
+    /**
+     * 없으면 읽기를 접을 컬럼입니다.
+     *
+     * 셋 다 없으면 조용히 어긋나는 것들입니다.
+     * 영업상태명이 바뀌면 모든 행이 비영업으로 판정되고,
+     * 관리번호가 바뀌면 식별자가 없어 전부 건너뛰며,
+     * 사업장명이 바뀌면 변환기가 전부 비웁니다.
+     * 어느 쪽이든 0 건을 보내고 정상으로 마감되어 오류로 드러나지 않습니다.
+     */
+    private static final Set<String> REQUIRED_COLUMNS =
+            Set.of(STATUS_COLUMN, ID_COLUMN, NAME_COLUMN);
 
     private final CsvReader csvReader;
     private final PlaceLinkClient placeLinkClient;
@@ -142,6 +156,7 @@ public class MoisVetDirectExecutor {
                     Path.of(config.filePath()),
                     Charset.forName(config.charset()),
                     COLUMN_COUNT,
+                    REQUIRED_COLUMNS,
                     row -> {
                         if (!ACTIVE_STATUS.equals(row.get(STATUS_COLUMN))) {
                             return;
@@ -152,7 +167,7 @@ public class MoisVetDirectExecutor {
                         if (sourceId == null || sourceId.isBlank()) {
                             // 실측에서는 5,474 건 전부 채워져 있었습니다
                             // 그래도 세는 이유는 새 판에서 비면 조용히 사라지기 때문입니다
-                            skipped.add("(식별자 없음) " + row.get("사업장명"));
+                            skipped.add("(식별자 없음) " + row.get(NAME_COLUMN));
                             return;
                         }
 

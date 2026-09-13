@@ -81,6 +81,7 @@ public class IngestTriggerService {
      * 만들어 두고 곧바로 실패로 마감하면 아무 일도 안 한 행이 이력에 남고,
      * 그것을 재개 대상으로 착각할 여지가 생깁니다.
      *
+     * 다만 그 검사는 실행 조합을 전부 본 뒤에 합니다.
      * 무엇을 보는지는 실행 종류마다 다릅니다. 아래 hasImplementation 을 보십시오.
      *
      * 증분 수집도 같은 자리에서 거절합니다.
@@ -102,10 +103,6 @@ public class IngestTriggerService {
      */
     @Transactional
     public UUID startRun(SourceType source, RunType runType) {
-        if (!hasImplementation(source, runType)) {
-            throw new CustomException(IngestErrorCode.COLLECTOR_NOT_REGISTERED);
-        }
-
         if (runType == RunType.INCREMENTAL && !source.supportsIncremental()) {
             // 소스마다 증분의 값어치가 다릅니다.
             //
@@ -157,6 +154,17 @@ public class IngestTriggerService {
             // 이제 그 소스에도 실행 경로가 생겨 그 방어가 사라짐
             log.info("이 소스는 원본을 담지 않아 받아 오기를 할 수 없습니다. source={}", source);
             throw new CustomException(IngestErrorCode.RUN_TYPE_NOT_SUPPORTED);
+        }
+
+        // 조합 검사를 전부 지난 뒤에 구현이 있는지 봅니다.
+        //
+        // 순서가 중요합니다.
+        // 이것을 먼저 두면 원본을 담지 않는 소스에 받아 오기를 부를 때
+        // "지원하지 않는 소스" 로 거절됩니다. 그 소스는 지원하고 있고
+        // 맞지 않는 것은 실행 종류라 이유가 틀립니다.
+        // 두 코드가 HTTP 상태는 같아도 응답의 code 가 달라 부르는 쪽이 그것으로 가릅니다.
+        if (!hasImplementation(source, runType)) {
+            throw new CustomException(IngestErrorCode.COLLECTOR_NOT_REGISTERED);
         }
 
         if (ingestRunRepository.existsRunningBySource(source)) {

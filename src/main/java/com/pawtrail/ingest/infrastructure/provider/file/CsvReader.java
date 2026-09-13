@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.csv.CSVFormat;
@@ -73,14 +74,25 @@ public class CsvReader {
      * 좌표 뒤에 붙어 오는 공백도 여기서 털립니다.
      * 행정안전부가 "199947.178659037    " 처럼 주는데 다듬지 않으면 숫자로 읽지 못합니다.
      *
+     * 컬럼 수와 함께 꼭 있어야 하는 이름도 봅니다.
+     *
+     * 수만 보면 이름이 바뀐 것을 못 잡습니다.
+     * 스물다섯 개를 유지한 채 영업상태명 하나가 바뀌면 모든 행이 비영업으로 판정되어,
+     * 빈 것을 보내고 정상으로 마감됩니다. 오류가 나지 않아 아무도 알아채지 못합니다.
+     * 관리번호나 사업장명이 바뀌어도 같은 결과가 됩니다.
+     *
+     * 전부 적지 않고 없으면 조용히 어긋나는 것만 적습니다.
+     * 값이 비는 것은 화면에서 드러나지만, 거르는 조건과 식별자는 그렇지 않습니다.
+     *
      * @param path            읽을 파일
      * @param charset         파일 인코딩. 문화정보원은 UTF-8, 행정안전부는 CP949
      * @param expectedColumns 헤더와 각 행의 컬럼 수. 어긋난 줄은 건너뛰고 경고를 남김
+     * @param requiredColumns 없으면 읽기를 접을 컬럼 이름. 비우면 이름은 보지 않음
      * @param rowSink         행마다 불립니다. 컬럼 이름을 열쇠로 하고 순서는 파일 그대로입니다
      * @return 넘긴 행 수. 컬럼 수가 어긋나 건너뛴 것은 세지 않습니다
      */
     public int read(Path path, Charset charset, int expectedColumns,
-                    Consumer<Map<String, String>> rowSink) {
+                    Set<String> requiredColumns, Consumer<Map<String, String>> rowSink) {
 
         if (!Files.isReadable(path)) {
             log.error("CSV 파일을 읽을 수 없습니다. path={}", path.toAbsolutePath());
@@ -102,6 +114,13 @@ public class CsvReader {
             if (header.size() != expectedColumns) {
                 log.error("헤더 컬럼 수가 다릅니다. expected={} actual={} header={}",
                         expectedColumns, header.size(), header);
+                throw new CustomException(IngestErrorCode.SOURCE_FILE_MALFORMED);
+            }
+            if (!header.containsAll(requiredColumns)) {
+                List<String> missing = requiredColumns.stream()
+                        .filter(column -> !header.contains(column))
+                        .toList();
+                log.error("꼭 있어야 하는 컬럼이 없습니다. missing={} header={}", missing, header);
                 throw new CustomException(IngestErrorCode.SOURCE_FILE_MALFORMED);
             }
 

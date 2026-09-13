@@ -116,11 +116,35 @@ class MoisVetItemConverterTest {
         }
 
         @Test
-        @DisplayName("하이픈이 섞여 있어도 숫자만 세어 판단한다")
-        void 하이픈_제거() {
+        @DisplayName("구분자가 섞여 있어도 걷어내고 판단한다")
+        void 구분자_제거() {
             // 실측 파일에는 하이픈이 한 건도 없었으나 다음 판이 그럴 것이라는 보장이 없음
             assertThat(converter.convert("1", row("가", "02-2237-7582", "199947.1", "453593.8")).tel())
                     .isEqualTo("0222377582");
+            assertThat(converter.convert("1", row("가", "(02) 2237 7582", "199947.1", "453593.8")).tel())
+                    .isEqualTo("0222377582");
+        }
+
+        @Test
+        @DisplayName("0 으로 시작하지 않으면 버린다")
+        void 영으로_시작하지_않으면_버림() {
+            // 국내 번호가 전부 0 으로 시작함
+            // 길이만 보면 사업자번호 같은 열 자리 숫자가 그대로 통과함
+            assertThat(converter.convert("1", row("가", "1234567890", "199947.1", "453593.8")).tel())
+                    .isNull();
+            assertThat(converter.convert("1", row("가", "15881234", "199947.1", "453593.8")).tel())
+                    .isNull();
+        }
+
+        @Test
+        @DisplayName("안내 문구가 붙어 있으면 버린다")
+        void 안내_문구가_붙으면_버림() {
+            // 숫자가 아닌 것을 전부 지우면 이런 값이 길이만 맞아 통과함
+            // 구분자만 걷어내므로 남은 글자가 모양 검사에서 걸림
+            assertThat(converter.convert("1", row("가", "02-1234-5678 내선 9", "199947.1", "453593.8")).tel())
+                    .isNull();
+            assertThat(converter.convert("1", row("가", "0212345678(대표)", "199947.1", "453593.8")).tel())
+                    .isNull();
         }
 
         @Test
