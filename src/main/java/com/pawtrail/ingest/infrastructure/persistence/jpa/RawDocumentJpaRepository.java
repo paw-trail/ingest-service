@@ -55,4 +55,15 @@ public interface RawDocumentJpaRepository extends JpaRepository<RawDocument, UUI
      * 식별자에 기본 키 인덱스가 있어 정렬에 따로 드는 비용이 없습니다.
      */
     Page<RawDocument> findBySourceOrderByIdAsc(SourceType source, Pageable pageable);
+
+    /**
+     * 그 장소에 이어진 원본을 돌려줍니다.
+     *
+     * place_id 에 인덱스가 있어 장소 하나를 집어내는 데 드는 비용이 없습니다.
+     *
+     * 정렬을 소스 이름순으로 두지 않습니다.
+     * 화면에 보이는 순서를 소스 열거값의 차례에 맞춰야 하는데 그것은 이름차례가 아닙니다.
+     * 그 정렬은 부르는 쪽이 합니다.
+     */
+    List<RawDocument> findByPlaceId(UUID placeId);
 }

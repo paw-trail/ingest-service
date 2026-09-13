@@ -4,6 +4,7 @@ import com.pawtrail.common.response.CommonApiResponse;
 import com.pawtrail.ingest.application.dto.output.IngestRunStartedOutput;
 import com.pawtrail.ingest.application.dto.output.IngestRunsOutput;
 import com.pawtrail.ingest.application.dto.output.PendingDocumentsOutput;
+import com.pawtrail.ingest.application.dto.output.PlaceDocumentsOutput;
 import com.pawtrail.ingest.application.dto.output.StatusUpdateOutput;
 import com.pawtrail.ingest.application.service.IngestExecutor;
 import com.pawtrail.ingest.application.service.PlaceLinkExecutor;
@@ -23,6 +24,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -149,5 +151,27 @@ public class InternalIngestController {
 
         return ResponseEntity.ok(CommonApiResponse.success(
                 rawDocumentStatusService.apply(request.done(), request.failed())));
+    }
+
+    /**
+     * 그 장소가 어느 원본에서 왔는지를 돌려줍니다.
+     *
+     * 장소 서비스의 「근거 원문 전체 보기」가 씁니다.
+     *
+     * 사람이 읽는 문장만 담습니다.
+     * 소스 응답 원본이 필요하면 위 목록 조회를 쓰는데 그쪽은 처리 배치가 쓰는 자리입니다.
+     *
+     * 표시 이름을 담지 않습니다. 부르는 쪽이 이미 가지고 있습니다.
+     *
+     * 문서가 없어도 200 입니다.
+     * 이 서비스는 그 식별자가 실제로 있는 장소인지 알 방법이 없고,
+     * 원본을 거치지 않는 소스로만 만들어진 장소는 원문이 아예 없습니다.
+     */
+    @GetMapping("/raw/{placeId}/documents")
+    public ResponseEntity<CommonApiResponse<PlaceDocumentsOutput>> getPlaceDocuments(
+            @PathVariable UUID placeId) {
+
+        return ResponseEntity.ok(
+                CommonApiResponse.success(ingestQueryService.getPlaceDocuments(placeId)));
     }
 }

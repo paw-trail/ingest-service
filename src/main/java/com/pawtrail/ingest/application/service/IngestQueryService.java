@@ -5,15 +5,19 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pawtrail.ingest.application.dto.output.IngestRunOutput;
 import com.pawtrail.ingest.application.dto.output.IngestRunsOutput;
 import com.pawtrail.ingest.application.dto.output.PendingDocumentsOutput;
+import com.pawtrail.ingest.application.dto.output.PlaceDocumentsOutput;
 import com.pawtrail.ingest.application.dto.output.RawDocumentOutput;
+import com.pawtrail.ingest.application.dto.output.RawDocumentViewOutput;
 import com.pawtrail.ingest.domain.enums.DocumentStatus;
 import com.pawtrail.ingest.domain.enums.SourceType;
 import com.pawtrail.ingest.domain.model.IngestRun;
 import com.pawtrail.ingest.domain.model.RawDocument;
 import com.pawtrail.ingest.domain.repository.IngestRunRepository;
 import com.pawtrail.ingest.domain.repository.RawDocumentRepository;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -146,5 +150,32 @@ public class IngestQueryService {
             return 1;
         }
         return Math.min(size, max);
+    }
+
+    /**
+     * 그 장소가 어느 원본에서 왔는지를 돌려줍니다.
+     *
+     * 사람이 읽는 문장만 담습니다.
+     * 소스 응답을 그대로 주면 고캠핑의 관리자 개인 이름과 사업자번호가 화면까지 흘러가고,
+     * 좌표와 분류 코드처럼 읽을 것이 아닌 값이 섞입니다.
+     *
+     * 없으면 빈 목록입니다. 찾지 못했다고 하지 않습니다.
+     * 이 서비스는 그 식별자가 실제로 있는 장소인지 알 방법이 없습니다.
+     * 우리 표에 없다는 것만 알지 장소가 없는 것인지 아직 넘기지 않은 것인지 구분하지 못합니다.
+     * 되물으려면 장소 서비스를 불러야 하는데 그것은 호출 방향이 거꾸로입니다.
+     * 원본을 거치지 않는 소스도 있어 그 소스만으로 만들어진 장소는 원문이 아예 없습니다.
+     *
+     * 순서를 소스 열거값의 차례로 맞춥니다.
+     * 장소 상세의 출처 뱃지가 같은 차례로 나오는데 원문 카드만 다른 차례면
+     * 같은 장소를 두 가지로 설명하는 것처럼 보입니다.
+     */
+    public PlaceDocumentsOutput getPlaceDocuments(UUID placeId) {
+        List<RawDocumentViewOutput> documents = rawDocumentRepository.findByPlaceId(placeId).stream()
+                .sorted(Comparator.comparing(RawDocument::getSource))
+                .map(RawDocumentViewOutput::from)
+                .toList();
+
+        log.debug("장소의 원문을 돌려줍니다. placeId={} count={}", placeId, documents.size());
+        return new PlaceDocumentsOutput(documents);
     }
 }
