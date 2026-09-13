@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -28,7 +29,7 @@ import org.springframework.stereotype.Component;
  *
  * <pre>
  * 행 하나씩 받아 ─→ 완전 중복 버리기 ─→ 대상 아니면 버리기 ─→ 같은 키는 최신만
- *   70,650              23,980              13,436            13,408
+ *   70,650              23,980              13,436            13,399
  * </pre>
  *
  * 거르는 판정이 셋인 이유가 있습니다.
@@ -44,6 +45,11 @@ import org.springframework.stereotype.Component;
  * 전 컬럼 동일 판정에 걸리지 않아 첫 판정을 그냥 지나갑니다.
  * 버리지 않으면 둘이 같은 식별자라 뒤에 오는 행이 앞을 덮어쓰는데,
  * 그러면 어느 판이 남을지가 파일에 적힌 순서에 달립니다.
+ *
+ * 셋째 판정은 시설명의 띄어쓰기가 다른 것도 함께 거둡니다.
+ * 소스가 같은 가게를 「박영재 동물병원」과 「박영재동물병원」으로 두 번 등록한 것이 아홉 쌍 있었고,
+ * 식별자가 이름을 그대로 쓰던 때에는 둘이 다른 키라 문서가 둘 들어왔습니다.
+ * 아래 sourceIdOf 를 보십시오.
  *
  * *셋을 읽는 도중에 함께 판정합니다.
  *  단계마다 목록을 만들면 7만 행을 통째로 들고 있게 되어 이백 메가바이트에 가깝습니다.
@@ -79,6 +85,16 @@ public class CultureCsvCollector implements SourceCollector {
      * 2026년 9월 9일 실측에서 두 컬럼 어디에도 이 문자가 나오지 않았습니다.
      */
     private static final String KEY_SEPARATOR = "|";
+
+    /**
+     * 식별자를 만들 때 시설명에서 걷어내는 공백입니다.
+     *
+     * 자바의 \s 는 전각 공백을 잡지 않아 따로 적었습니다.
+     * 줄바꿈 없는 공백도 사람이 다른 곳에서 붙여 넣은 값에 섞여 들어옵니다.
+     * 지번주소에는 걸지 않습니다. 주소 띄어쓰기가 달라 갈린 쌍은 실측에서 한 건도 없었고,
+     * 번지를 붙이면 서로 다른 주소가 겹칠 여지만 생깁니다.
+     */
+    private static final Pattern NAME_SPACES = Pattern.compile("[\\s\\u00A0\\u3000]+");
 
     private static final DateTimeFormatter WRITTEN_AT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
@@ -243,9 +259,29 @@ public class CultureCsvCollector implements SourceCollector {
      * 해시로 줄이지도 않습니다.
      * 길이는 고정되지만 이 값을 사람이 읽을 수 없게 됩니다.
      * 원본은 관리자 전용이 아니라 사용자가 여는 표이고 조회 경로도 따로 만들 예정입니다.
+     *
+     * 이름은 공백을 걷어내고 씁니다. 아래 normalizedName 에 이유를 적었습니다.
      */
     private String sourceIdOf(Map<String, String> row) {
-        return value(row, NAME_COLUMN) + KEY_SEPARATOR + value(row, ADDRESS_COLUMN);
+        return normalizedName(row) + KEY_SEPARATOR + value(row, ADDRESS_COLUMN);
+    }
+
+    /**
+     * 식별자에 쓰는 시설명입니다. 양끝뿐 아니라 가운데 공백까지 걷어냅니다.
+     *
+     * 소스가 같은 가게를 띄어쓰기만 달리해 두 번 등록한 것이 아홉 쌍 있었습니다.
+     * 이름을 그대로 쓰면 둘이 다른 키가 되어 유일 제약에 걸리지 않고 문서가 둘 들어옵니다.
+     * 그러면 원문 보기에 같은 문서가 두 번 뜨고 재수집 때 둘 다 갱신됩니다.
+     *
+     * 장소 서비스가 이름을 견줄 때 쓰는 규칙과 같습니다.
+     * 거기서는 이미 공백을 지운 이름으로 판정해 아홉 쌍을 한 장소로 합치고 있었고,
+     * 원본 쪽만 갈려 있었습니다. 두 곳의 규칙이 이 변경으로 같아집니다.
+     *
+     * 표시 이름은 건드리지 않습니다. 아래 toDraft 가 원본 표기를 그대로 담습니다.
+     * 이 표는 우리가 잘라내지 않았다는 것을 보여주는 자리입니다.
+     */
+    private String normalizedName(Map<String, String> row) {
+        return NAME_SPACES.matcher(value(row, NAME_COLUMN)).replaceAll("");
     }
 
     private String categoryOf(Map<String, String> row) {
