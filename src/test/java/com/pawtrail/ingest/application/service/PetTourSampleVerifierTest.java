@@ -180,7 +180,8 @@ class PetTourSampleVerifierTest {
                 20, 0, 0, 1000, 5,
                 new IngestProperties.PetTour("http://localhost", "test-only", 100, sampleSize),
                 new IngestProperties.GoCamping("http://localhost", "test-only", 100),
-                new IngestProperties.Culture("build/tmp/test-culture.csv"));
+                new IngestProperties.Culture("build/tmp/test-culture.csv"),
+                new IngestProperties.MoisVet("build/tmp/test-mois-vet.csv", "CP949"));
         return new PetTourSampleVerifier(
                 client, rawDocumentRepository, jsonNormalizer, objectMapper, properties);
     }

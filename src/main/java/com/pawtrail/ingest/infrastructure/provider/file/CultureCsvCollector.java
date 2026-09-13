@@ -5,6 +5,7 @@ import com.pawtrail.ingest.domain.provider.CollectionContext;
 import com.pawtrail.ingest.domain.provider.SourceCollector;
 import com.pawtrail.ingest.domain.provider.dto.RawDocumentDraft;
 import com.pawtrail.ingest.infrastructure.config.IngestProperties;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -98,7 +99,16 @@ public class CultureCsvCollector implements SourceCollector {
 
     private static final DateTimeFormatter WRITTEN_AT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
-    private final CultureCsvReader reader;
+    /**
+     * 이 파일의 컬럼 수입니다.
+     *
+     * 어긋난 줄은 넘기지 않고 경고를 남깁니다.
+     * 파서가 형식을 잘못 읽으면 필드 수가 먼저 어긋나므로 여기서 드러납니다.
+     * 2026년 9월 9일 실측에서 70,650행 전부 서른한 개였습니다.
+     */
+    private static final int COLUMN_COUNT = 31;
+
+    private final CsvReader reader;
     private final CultureDisplayBodyAssembler assembler;
     private final IngestProperties properties;
 
@@ -117,7 +127,11 @@ public class CultureCsvCollector implements SourceCollector {
         // 얼마나 담았는지는 실행 기록의 건수 두 개가 이미 보여줍니다.
 
         Sifter sifter = new Sifter();
-        int read = reader.read(Path.of(properties.culture().filePath()), sifter::accept);
+        int read = reader.read(
+                Path.of(properties.culture().filePath()),
+                StandardCharsets.UTF_8,
+                COLUMN_COUNT,
+                sifter::accept);
         Map<String, Map<String, String>> latest = sifter.result();
 
         log.info("거르기를 마쳤습니다. 원본={} 완전중복제거={} 대상={} 최신만={}",

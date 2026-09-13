@@ -101,6 +101,31 @@ public class IngestTriggerService {
             throw new CustomException(IngestErrorCode.RUN_TYPE_NOT_SUPPORTED);
         }
 
+        if (runType == RunType.DIRECT && source.isStoredAsRawDocument()) {
+            // 바로 보내면 안 되는 소스임
+            //
+            // 위 검사와 정확히 반대임
+            // 원본을 담는 소스는 담는 것과 넘기는 것이 두 단계로 갈려 있어
+            // 받아 오기는 FULL 이나 INCREMENTAL 로, 넘기기는 LINK 로 부름
+            // 그 소스로 이 실행을 부르면 파일을 읽는 자리가 아예 없음
+            //
+            // 표시를 하나로 두는 것이 중요함
+            // "담으면 LINK · 안 담으면 DIRECT" 라는 관계가 그대로 성립하므로
+            // 값을 따로 두면 한쪽만 고쳐 어긋날 자리가 생김
+            log.info("이 소스는 원본을 담으므로 바로 보낼 수 없습니다. source={}", source);
+            throw new CustomException(IngestErrorCode.RUN_TYPE_NOT_SUPPORTED);
+        }
+
+        if (runType != RunType.DIRECT && !source.isStoredAsRawDocument()) {
+            // 담지 않는 소스에 받아 오기를 부른 경우임
+            //
+            // FULL 과 INCREMENTAL 은 받아서 우리 표에 담는 실행인데 담을 자리가 없음
+            // 수집기가 없던 동안은 앞의 검사가 대신 막아 주었으나
+            // 이제 그 소스에도 실행 경로가 생겨 그 방어가 사라짐
+            log.info("이 소스는 원본을 담지 않아 받아 오기를 할 수 없습니다. source={}", source);
+            throw new CustomException(IngestErrorCode.RUN_TYPE_NOT_SUPPORTED);
+        }
+
         if (ingestRunRepository.existsRunningBySource(source)) {
             throw new CustomException(IngestErrorCode.INGEST_ALREADY_RUNNING);
         }
