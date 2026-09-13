@@ -89,6 +89,10 @@ app:
     max-retries: 0
     retry-backoff-ms: 1000
     max-consecutive-failures: 5
+    link:
+      # 이 시험은 장소 서비스를 부르지 않음, 값이 비면 바인딩이 실패하므로 자리만 채움
+      chunk-size: 100
+      read-timeout-seconds: 5
     pet-tour:
       base-url: http://localhost
       service-key: test-only

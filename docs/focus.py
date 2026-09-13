@@ -65,9 +65,9 @@ B,V,G,O,P,X,L="#3B82F6","#6366F1","#16A34A","#F97316","#A855F7","#9CA3AF","#D977
 
 
 # ── ingest-service
-d=D(1640,900)
+d=D(1860,900)
 d.me("ig",800,450,360,110,"dom","ingest-service  :8088",
-     "공공데이터를 받아 원문 그대로 담음|API 4개 · 화면 없음 · 상시 미기동")
+     "공공데이터를 받아 담고 place 로 넘김|API 5개 · 화면 없음 · 상시 미기동")
 
 d.node("jk",180,140,260,90,"fut","Jenkins 잡","수집을 언제 부를지 정함|아직 없음",dash=True)
 d.node("api",180,360,260,100,"ext","공공데이터포털","반려동물 동반여행 · 고캠핑|오퍼레이션마다 하루 1,000회",dash=True)
@@ -75,10 +75,10 @@ d.node("csv",180,580,260,90,"ext","문화정보원 CSV","이미지 안에 담겨
 d.node("gw",180,790,260,70,"edge","gateway-server","여기로는 라우팅하지 않음",dash=True)
 
 d.node("cf",800,120,320,80,"plat","config-server","포트 · DB · 인증키 · 소스별 값")
-d.node("eu",1420,110,300,80,"plat","eureka-server","등록")
-d.node("pg",1420,300,300,100,"data","PostgreSQL  raw_db","raw_document 17,480건|ingest_run  (표 2개)")
-d.node("ex",1420,560,300,100,"domn","extract-service","대기 문서를 가져가 해석|아직 없음")
-d.node("pl",1420,780,300,90,"fut","place-service","장소로 합치는 곳|2단계에서 부름",dash=True)
+d.node("eu",1520,110,300,80,"plat","eureka-server","등록")
+d.node("pg",1520,300,300,100,"data","PostgreSQL  raw_db","raw_document 17,480건 · place_id 17,472|ingest_run  (표 2개)")
+d.node("ex",1520,560,300,100,"domn","extract-service","대기 문서를 가져가 해석|아직 없음")
+d.node("pl",1520,780,300,100,"domn","place-service","소스가 겹친 것을 한 장소로|넘긴 결과를 돌려줌")
 
 d.edge("jk","r","ig","l",X,"POST /internal/ingest/trigger",dash=True,
        via=[(500,140),(500,420)],b_pt=(620,420),lx=330,ly=132,anchor="start")
@@ -90,14 +90,16 @@ d.edge("gw","r","ig","b",X,"라우팅하지 않음",dash=True,
        via=[(560,790),(560,540)],b_pt=(700,505),lx=570,ly=700,anchor="start")
 
 d.edge("cf","b","ig","t",V,"기동 시 설정")
-d.edge("ig","r","eu","l",V,"등록",via=[(1120,450),(1120,110)],lx=1130,ly=250,anchor="start")
+d.edge("ig","r","eu","l",V,"등록",via=[(1220,450),(1220,110)],lx=1230,ly=250,anchor="start")
 d.edge("ig","r","pg","l",O,"JPA · Flyway V20 · V21",
-       via=[(1120,450),(1120,300)],lx=1130,ly=370,anchor="start")
+       via=[(1220,450),(1220,300)],lx=1230,ly=370,anchor="start")
 d.edge("ex","l","ig","r",G,"GET /internal/raw · PATCH 로 결과 반영",
-       via=[(1120,560),(1120,470)],lx=890,ly=548,anchor="start")
-d.edge("ig","r","pl","l",G,"POST /internal/places/bulk  (2단계)",dash=True,
-       a_pt=(980,490),via=[(1050,520),(1050,780)],lx=1060,ly=690,anchor="start")
+       a_pt=(1370,560),via=[(1100,560),(1100,470)],b_pt=(980,470),lx=1360,ly=552,anchor="end")
+d.edge("ig","r","pl","l",G,"POST /internal/places/bulk  →  place_id 를 돌려받음",
+       a_pt=(980,495),via=[(1300,495),(1300,760)],b_pt=(1370,760),lx=1310,ly=640,anchor="start")
+d.edge("pl","l","ig","r",G,"GET /internal/raw/{placeId}/documents",
+       a_pt=(1370,810),via=[(1180,810),(1180,505)],b_pt=(980,505),lx=1000,ly=800,anchor="start")
 
-d.note(40,858,"게이트웨이가 /internal 을 라우팅하지 않음 — 화면이 없고 부르는 것이 Jenkins 잡과 extract 뿐임 · Kafka 를 쓰지 않아 이벤트를 발행하지도 받지도 않음")
+d.note(40,858,"게이트웨이가 /internal 을 라우팅하지 않음 — 화면이 없고 부르는 것이 Jenkins 잡과 extract 와 place 뿐임 · Kafka 를 쓰지 않아 이벤트를 발행하지도 받지도 않음")
 d.note(40,880,"관광공사 상세는 한 번에 3,237회라 하루 한도를 넘김 — 그날 받은 데까지 기록하고 다음 날 그 자리부터 이어받음 · 원문은 고치지 않고 담고 해석은 extract 가 함")
 d.save("ingest-service","ingest-service 를 중심으로 · 직접 연결된 것만")

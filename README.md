@@ -37,13 +37,16 @@
 ### 0-1. 한 문장으로
 
 ```
-공공데이터포털 ──┐
-                 ├──▶  ingest  :8088  ──▶  PostgreSQL  raw_db
-문화정보원 CSV ──┘                                        │
-                                                          └──▶  extract 가 가져가 해석함
+공공데이터포털 ──┐                                   ┌──▶  extract 가 가져가 해석함
+                 ├──▶  ingest  :8088  ──▶  raw_db ──┤
+문화정보원 CSV ──┘            │                      └──▶  원문보기가 그대로 보여줌
+                               │
+                               └──▶  place 로 넘겨 장소로 만듦
 ```
 
-**받아서 담는 것까지가 전부입니다.** 조건을 읽어 내는 일도, 장소를 합치는 일도 다른 서비스가 합니다.
+**받아서 담고, 담은 것을 `place` 로 넘기는 것까지입니다.**
+조건을 읽어 내는 일도, 같은 장소를 하나로 합치는 일도 다른 서비스가 합니다.
+넘기기만 할 뿐 어느 장소로 갈지는 받는 쪽이 정하고, 우리는 그 결과를 받아 적어 둡니다.
 
 ---
 
@@ -59,11 +62,16 @@
 
 ```
 받아 오기      ingest        ← 이 레포
+넘기기         ingest        ← 이것도.  담아 둔 것을 place 로 보냄
 해석하기       extract       "목줄 착용" 같은 문장에서 조건을 뽑음
 합치기         place         여러 소스의 같은 장소를 하나로
 판정하기       verdict       "이 개를 데려갈 수 있는가" 를 답함
 보여주기       search · user · review …
 ```
+
+**받아 오기와 넘기기가 갈려 있습니다.** 같은 레포가 하지만 부르는 시점이 다릅니다.
+받아 오는 것은 허용량을 쓰므로 하루에 몇 번뿐이고,
+넘기는 것은 허용량을 안 써 얼마든지 다시 할 수 있습니다.
 
 **서비스가 여럿인 이유**는 이 다섯이 서로 아주 다른 일이기 때문입니다.
 받아 오는 일은 하루에 몇 번, 보여주는 일은 초당 몇 번 일어납니다.
@@ -143,7 +151,12 @@ compose 에서도 `app` 이 아니라 **`pipeline` 프로파일**에 있습니�
 | `MOIS_VET` | 행정안전부 동물병원 인허가 | ⛔안 담음 |
 
 `MOIS_VET` 은 인허가 대장이라 **동반 조건 문장이 아예 없습니다.** 해석할 것이 없으니
-`extract` 가 할 일도 없고, 원문보기에 보여줄 근거도 없습니다. 2단계에서 `place` 로 바로 넘깁니다.
+`extract` 가 할 일도 없고, 원문보기에 보여줄 근거도 없습니다.
+그 소스는 `raw_db` 를 거치지 않고 `place` 로 바로 보낼 생각인데 **아직 그 수집기가 없습니다.**
+
+> ⚠**그래서 동물병원은 원문보기가 영영 빈 목록입니다.**
+> 원문보기라는 쓰임이 나중에 생겼으니 그 소스도 담을지는 다시 볼 자리입니다.
+> [12-2](#12-2-판단이-남은-것) 참고.
 
 ---
 
@@ -166,7 +179,7 @@ compose 에서도 `app` 이 아니라 **`pipeline` 프로파일**에 있습니�
 |---|---|
 | **처음 본다** | [2장](#2-소스-3종이-서로-다릅니다) → [3장](#3-호출-허용량이-이-서비스를-지배합니다) |
 | 로컬에서 띄워 본다 | [1장](#1-로컬에서-띄우기) |
-| API 를 부른다 | [5장](#5-api-4개) |
+| API 를 부른다 | [5장](#5-api-5개) |
 | DB 를 본다 | [6장](#6-데이터--raw_db-두-표) |
 | 코드를 고친다 | [7장](#7-코드-구조) → [4장](#4-무엇을-어떻게-담는가) |
 | 안 도는 것을 고친다 | [11장](#11-막히기-쉬운-자리) |
@@ -273,11 +286,22 @@ curl "http://localhost:8088/actuator/health"
 
 **⛔누르기 전에 그 소스가 무엇을 쓰는지 보십시오.**
 
+`runType` 이 `FULL` 이거나 `INCREMENTAL` 일 때입니다. 바깥을 부르므로 허용량을 씁니다.
+
 | 소스 | 쓰는 호출 | |
 |---|---|---|
 | `CULTURE_CSV` | **0회** | ✅얼마든지 돌려도 됨. 파일만 읽음 |
 | `GOCAMPING` | 1회 | 하루 1,000 중 하나. 부담 없음 |
 | `PET_TOUR` | ⛔목록 11 + 상세 3,237 | 하루치를 통째로 씀. 되돌릴 수 없음 |
+
+`runType` 이 `LINK` 면 다릅니다. 바깥을 부르지 않고 담아 둔 것을 `place` 로 보냅니다.
+
+| | |
+|---|---|
+| 쓰는 호출 | **0회.** ✅허용량과 무관해 몇 번이든 돌려도 됩니다 |
+| ⛔먼저 할 것 | **`place` 를 띄워 두십시오.** 안 떠 있으면 `502` `PLACE_LINK_FAILED` 로 끝납니다 |
+| 걸리는 시간 | 1,000건에 20초쯤. `CULTURE_CSV` 13,408건이면 5분 남짓 |
+| 여러 번 돌리면 | 같은 결과가 됩니다. 이미 이어 둔 장소를 다시 찾아 붙어 식별자가 바뀌지 않습니다 |
 
 **`CULTURE_CSV` 로 시작하십시오.**
 
@@ -907,7 +931,7 @@ DELETE FROM raw_document WHERE source = 'GOCAMPING';
 
 ---
 
-## 5. API 4개
+## 5. API 5개
 
 **전부 `/internal` 입니다.** 게이트웨이가 라우팅하지 않아 브라우저에서 닿지 않습니다.
 
@@ -920,6 +944,11 @@ DELETE FROM raw_document WHERE source = 'GOCAMPING';
 | 2 | `GET /internal/ingest/runs` | 관리자 화면 |
 | 3 | `GET /internal/raw` | `extract` |
 | 4 | `PATCH /internal/raw/status` | `extract` |
+| 5 | `GET /internal/raw/{placeId}/documents` | `place` |
+
+**3번과 5번이 같은 표를 읽지만 주는 것이 반대입니다.**
+3번은 소스 응답 원본을 주고 표시용 문장을 빼며, 5번은 표시용 문장만 주고 원본을 뺍니다.
+쓰는 쪽이 기계와 사람으로 갈리기 때문입니다.
 
 응답은 전부 공통 형태로 감싸집니다.
 
@@ -939,15 +968,36 @@ DELETE FROM raw_document WHERE source = 'GOCAMPING';
 | 값 | 넣을 수 있는 것 |
 |---|---|
 | `source` | `PET_TOUR` · `GOCAMPING` · `CULTURE_CSV` |
-| `runType` | `FULL` · `INCREMENTAL` |
+| `runType` | `FULL` · `INCREMENTAL` · `LINK` |
 
-**바로 202 를 돌려주고 수집은 뒤에서 돕니다.** 관광공사 전량은 이틀이 걸려 기다리게 할 수 없습니다.
+**`LINK` 만 하는 일이 다릅니다.**
+
+```
+FULL · INCREMENTAL   바깥에서 받아 raw_db 에 담음      허용량을 씀
+LINK                 담아 둔 것을 place 로 넘김        허용량을 안 씀
+```
+
+앞의 둘은 받아 오는 방법이 다른 것이고 `LINK` 는 하는 일 자체가 다릅니다.
+그런데도 같은 경로로 받는 것은 **실행 기록이 하나이기 때문**입니다.
+언제 시작해 몇 건을 다루고 어떻게 끝났는지를 같은 표에 남깁니다.
+
+> **수집이 끝나면 자동으로 넘기지 않습니다.** 눌러야 넘어갑니다.
+> 자동으로 이으면 수집만 다시 하고 싶을 때 넘기기까지 딸려 오고,
+> 무엇을 언제 내보낼지를 사람이 정하지 못하게 됩니다.
+> 같은 소스를 수집하는 중에는 넘기지도 못합니다. 절반만 있는 상태를 보내게 되기 때문입니다.
+
+**바로 202 를 돌려주고 뒤에서 돕니다.** 관광공사 전량은 이틀이 걸려 기다리게 할 수 없습니다.
 
 | 이런 때 | 응답 |
 |---|---|
 | 같은 소스가 이미 돌고 있음 | `409` `INGEST_ALREADY_RUNNING` |
 | 그 소스에 수집기가 없음 | `501` `COLLECTOR_NOT_REGISTERED` |
 | `GOCAMPING`·`CULTURE_CSV` 에 `INCREMENTAL` | `501` `RUN_TYPE_NOT_SUPPORTED` |
+| 원본을 담지 않는 소스에 `LINK` | `501` `RUN_TYPE_NOT_SUPPORTED` |
+
+> ⛔**`LINK` 는 `place` 가 떠 있어야 합니다.** 안 떠 있으면 첫 묶음에서 `502` `PLACE_LINK_FAILED` 로 끝납니다.
+> 그때는 실행이 `FAILED` 로 마감되고 `error_message` 에 원인이 남습니다.
+> 처음부터 다시 누르면 됩니다. 어디까지 갔는지를 남기지 않지만 여러 번 보내도 결과가 같습니다.
 
 > ⛔**같은 소스를 두 번 부르면 거절합니다.** 나란히 돌면 같은 허용량을 두 배로 쓰고
 > 둘 다 한도에 못 미쳐 멈춰, 어느 쪽도 끝내지 못한 채 그날 몫이 사라집니다.
@@ -1054,15 +1104,75 @@ GET /internal/raw?status=PENDING&size=100
 
 ---
 
-### 5-5. 에러 코드
+### 5-5. `GET /internal/raw/{placeId}/documents` — 원문 보여주기
+
+장소 화면의 「근거 원문 전체 보기」가 씁니다.
+**우리가 어느 값을 골랐는지와 무관하게 소스가 준 것을 그대로 보여주는 자리**입니다.
+
+```json
+응답   200
+{
+  "documents": [
+    { "source": "PET_TOUR",
+      "title": "문암생태공원",
+      "body": "[동반 유형] 일부구역 동반가능\n[동반 가능 반려동물] 맹견 제외 전 견종 동반 가능\n…",
+      "sourceModifiedAt": "2025-09-16T15:31:47",
+      "fetchedAt": "2026-09-09T14:22:57" }
+  ]
+}
+```
+
+| 필드 | |
+|---|---|
+| `source` | 어느 데이터셋에서 왔는지. **표시 이름은 없습니다** |
+| `title` | 소스가 부른 이름. 장소 이름과 다를 수 있고 그 차이가 정보입니다 |
+| `body` | 사람이 읽는 본문. 조립할 내용이 없으면 비어 있습니다 |
+| `sourceModifiedAt` | 소스가 알려준 마지막 수정 시각 |
+| `fetchedAt` | 우리가 받아 온 시각 |
+
+**원본을 담지 않습니다.** [4-2](#4-2-display_body--사람이-읽는-것만) 에서 정한 기준을 그대로 따릅니다.
+기계용 필드를 빼고 사람이 읽는 자연어만 남긴 것이 `display_body` 이고 이 API 는 그것을 꺼내 줍니다.
+그리고 고캠핑 응답에는 **관리자 개인 이름과 사업자번호**가 들어 있어 그대로 주면 화면까지 흘러갑니다.
+
+**표시 이름을 담지 않습니다.** 이 서비스의 소스 열거값에는 그 값이 주석에만 있고,
+부르는 쪽이 이미 가지고 있어 상세 응답의 출처 뱃지에 쓰고 있습니다.
+여기서 내보내면 같은 화면에 출처 이름이 두 곳에서 오게 되어 한쪽만 고치는 날 어긋납니다.
+
+**순서는 소스 열거값의 차례입니다.** 관광공사 · 고캠핑 · 문화정보원 순이고
+그것이 장소 상세의 출처 뱃지 순서와 같습니다.
+데이터베이스에서 이름차례로 정렬하면 문화정보원이 앞에 와 화면과 어긋납니다.
+
+**쪽을 나누지 않습니다.** 한 장소에 이어질 수 있는 원본이 소스 수만큼이라 많아야 셋입니다.
+
+> ⛔**문서가 없어도 200 에 빈 목록입니다.** 찾지 못했다고 하지 않습니다.
+> 이 서비스는 그 식별자가 실제로 있는 장소인지 알 방법이 없습니다.
+> 우리 표에 없다는 것만 알지 장소가 없는 것인지 아직 넘기지 않은 것인지 구분하지 못합니다.
+> 되물으려면 `place` 를 불러야 하는데 그것은 호출 방향이 거꾸로입니다.
+> `MOIS_VET` 은 원본을 거치지 않아 **동물병원은 원문이 영영 없습니다.** 그것도 빈 목록입니다.
+
+세 소스가 같은 장소를 가리키면 셋이 다 나옵니다. 실제로 이렇게 나옵니다.
+
+```
+PET_TOUR     문암생태공원   2025-09-16
+GOCAMPING    문암생태공원   2025-09-26
+CULTURE_CSV  문암생태공원   2022-11-30
+```
+
+같은 장소를 두고 소스가 알려준 기준일이 **3년 가까이** 벌어져 있습니다.
+이 화면이 있는 이유가 그것입니다.
+
+---
+
+### 5-6. 에러 코드
 
 | 코드 | HTTP | 언제 |
 |---|---|---|
 | `INGEST_ALREADY_RUNNING` | 409 | 같은 소스가 이미 도는 중 |
 | `COLLECTOR_NOT_REGISTERED` | 501 | 그 소스의 수집기가 없음 |
-| `RUN_TYPE_NOT_SUPPORTED` | 501 | 그 소스가 증분을 지원하지 않음 |
+| `RUN_TYPE_NOT_SUPPORTED` | 501 | 그 소스가 증분을 지원하지 않거나 원본을 담지 않음 |
 | `INGEST_RUN_NOT_FOUND` | 404 | 실행 기록을 못 찾음 |
 | `SOURCE_API_FAILED` | 502 | 재시도를 다 쓰고도 소스 호출이 실패 |
+| `PLACE_LINK_FAILED` | 502 | `place` 에 넘기지 못했거나 답이 약속과 다름 |
 | `SOURCE_FILE_NOT_READABLE` | 500 | CSV 를 못 읽음. 경로나 배포 문제 |
 | `SOURCE_FILE_MALFORMED` | 500 | CSV 컬럼 수가 다름 |
 | `RAW_DOCUMENT_NOT_FOUND` | 400 | 없는 식별자로 상태를 바꾸려 함 |
@@ -1097,7 +1207,7 @@ ingest_run       수집을 한 번 부른 기록          부를 때마다 한 �
 | `id` | uuid | UUIDv7. 시간 순서를 담음 |
 | `source` | varchar(20) | 3종. `MOIS_VET` 은 여기 안 옴 |
 | `source_id` | varchar(100) | 소스가 준 식별자 |
-| `place_id` | uuid | ⛔지금은 전부 비어 있음. `place` 가 채울 자리 |
+| `place_id` | uuid | 어느 장소가 됐는지. 넘기기 전에는 비어 있음 |
 | `payload` | jsonb | 소스 응답 원본 |
 | `display_title` | varchar(200) | 장소 이름 |
 | `display_body` | text | 원문보기가 보여주는 것 |
@@ -1137,7 +1247,7 @@ ingest_run       수집을 한 번 부른 기록          부를 때마다 한 �
 
 ```sql
 UNIQUE (source, source_id)              재수집은 INSERT 가 아니라 UPDATE
-INDEX  (place_id)                       원문보기가 장소로 찾음  (2단계)
+INDEX  (place_id)                       원문보기가 장소로 찾음
 INDEX  (id) WHERE status = 'PENDING'    ⛔부분 인덱스
 ```
 
@@ -1204,7 +1314,8 @@ application      service · dto/output · support    흐름을 엮음
      │
 domain           model · repository(약속) · provider · enums · exception
      │
-infrastructure   persistence(구현) · provider/external · provider/file · config
+infrastructure   persistence(구현) · provider/external · provider/file
+                 provider/internal · provider/convert · config
 ```
 
 **`domain` 이 무엇도 의존하지 않는 것이 규칙입니다.**
@@ -1233,6 +1344,30 @@ InternalIngestController
                 └──▶  ChunkWriter.complete / stopByQuota / interrupt / fail
 ```
 
+`runType` 이 `LINK` 면 컨트롤러가 다른 실행기로 보냅니다.
+
+```
+InternalIngestController
+     │
+     ├──▶  IngestTriggerService   @Transactional     같은 것을 씀
+     │
+     └──▶  PlaceLinkExecutor      @Async             ⛔트랜잭션 없음
+                │
+                ├──▶  RawDocumentRepository.findBySource(...)   1,000건씩
+                │
+                ├──▶  PlaceItemConverter.convert(...)           소스마다 다른 구현
+                │
+                ├──▶  PlaceLinkClient.send(...)                 place 를 부름
+                │          └──▶  돌려받은 짝이 약속대로인지 봄
+                │
+                ├──▶  PlaceLinkWriter.applyChunk   @Transactional   place_id 를 채움
+                │
+                └──▶  ChunkWriter.complete / fail                마감은 같은 것을 씀
+```
+
+**마감을 수집 쪽 기록기에 맡깁니다.** 실행 기록을 다루는 방식이 같아 같은 코드를 두 번 쓸 이유가 없습니다.
+새 기록기는 묶음을 반영하는 일 하나만 맡습니다.
+
 **셋으로 나눈 것이 설계입니다.**
 
 ```
@@ -1252,34 +1387,49 @@ InternalIngestController
 |---|---|
 | `IngestTriggerService` | 실행을 만듦. 중복·미지원을 여기서 거름 |
 | `IngestExecutor` | 수집 루프. 예외를 받아 마감 상태를 정함 |
-| `ChunkWriter` | 청크 저장 + 진행 기록. 유일하게 DB 에 씀 |
-| `IngestQueryService` | 조회 둘 |
+| `ChunkWriter` | 청크 저장 + 진행 기록. 마감도 여기서 |
+| `PlaceLinkExecutor` | 넘기기 루프. 읽고 바꾸고 보냄 |
+| `PlaceLinkWriter` | 돌려받은 식별자를 `place_id` 에 채움 |
+| `IngestQueryService` | 조회 셋 |
 | `RawDocumentStatusService` | 상태 묶음 갱신 |
 | `PetTourSampleVerifier` | 증분 전제를 표본으로 확인 |
 | `JsonNormalizer` | 정규화 직렬화 + 해시 |
 | `SourceCollector` 구현 3개 | 소스마다 받아 오는 방법 |
+| `PlaceItemConverter` 구현 3개 | 소스마다 넘기는 형태로 바꾸는 방법 |
 | `~DisplayBodyAssembler` 3개 | 소스마다 표시용 본문을 조립 |
 
-**수집기와 클라이언트는 소스마다 따로입니다.**
+**수집기와 클라이언트와 변환기가 전부 소스마다 따로입니다.**
 
 ```
 external/   PetTourApiClient · PetTourCollector · PetTourDisplayBodyAssembler
             GoCampingApiClient · GoCampingCollector · GoCampingDisplayBodyAssembler
 file/       CultureCsvReader · CultureCsvCollector · CultureDisplayBodyAssembler
+convert/    PetTourItemConverter · GoCampingItemConverter · CultureItemConverter
+            PayloadPicker                     셋이 함께 쓰는 도우미
+internal/   PlaceLinkClientImpl               place 를 부르는 자리
 ```
 
 `external` 은 바깥을 부르는 것, `file` 은 파일을 읽는 것입니다. 성격이 달라 폴더를 갈랐습니다.
+`internal` 은 **우리가 만든 다른 서비스**를 부르는 자리라 또 다릅니다.
+
+> ⛔**다른 서비스를 부를 때는 `RestClient.builder()` 를 직접 쓰면 안 됩니다.**
+> 공통 모듈이 인증 헤더와 서비스 이름 해석과 시간 제한을 미리 걸어 둔 빌더를 내어 주는데,
+> 같은 타입의 빌더가 셋이고 그중 하나가 기본으로 지정되어 있습니다.
+> 이름을 적어 주지 않으면 아무것도 안 얹힌 그것이 조용히 주입되어
+> **기동은 되고 부르는 순간에 실패합니다.**
+> 롬복이 만드는 생성자에는 그 이름을 붙일 수 없어 생성자를 손으로 씁니다.
 
 ---
 
-### 7-4. 시험 125개
+### 7-4. 시험 145개
 
 | | 무엇을 |
 |---|---|
 | 클라이언트 | 오류를 어떻게 가르는지. ⛔**실제 HTTP 서버를 띄워** 확인 |
 | 수집기 3종 | 필터 · 재개 지점 · 청크 · 증분 판단 |
 | 조립기 3종 | 라벨 순서 · 빈 값 · 제외 목록 |
-| 조회 · 상태 갱신 | 언제나 첫 쪽인지 · 부분 반영이 안 생기는지 |
+| 변환기 3종 | 어느 키를 어느 칸에. ⛔**좌표 순서와 분류 자리** |
+| 조회 · 상태 갱신 | 언제나 첫 쪽인지 · 부분 반영이 안 생기는지 · 원본이 안 새는지 |
 | 검증기 | 표본이 실행 결과를 안 바꾸는지 |
 | 정렬 | ⛔**PostgreSQL 컨테이너를 띄워** 확인 |
 
@@ -1344,6 +1494,11 @@ app:
     retry-backoff-ms: 1000
     max-consecutive-failures: 5
 
+    # place 로 넘길 때만 쓰는 값
+    link:
+      chunk-size: 1000
+      read-timeout-seconds: 120
+
     pet-tour:
       base-url: https://apis.data.go.kr/B551011/KorPetTourService2
       service-key: ${INGEST_PUBLIC_DATA_SERVICE_KEY}
@@ -1366,6 +1521,8 @@ app:
 | `max-retries` | 일시적인 실패에 다시 시도하는 횟수 | 최초 1회 + 재시도 3회 = 최대 4번 부름 |
 | `retry-backoff-ms` | 기다리는 시간 | 시도마다 배로. 1초 → 2초 → 4초 |
 | `max-consecutive-failures` | 연달아 실패하면 접는 기준 | 5건. 그 위는 소스가 멈춘 것으로 봄 |
+| `link.chunk-size` | 한 번에 `place` 로 보낼 건수 | 받는 쪽 상한이 1,000. ⛔위 `chunk-size` 와 기준이 다름 |
+| `link.read-timeout-seconds` | `place` 의 답을 기다리는 시간 | 120초. ⛔전역 값 5초로는 못 함 |
 | `pet-tour.list-page-size` | 목록을 한 번에 몇 건씩 | 1,000 이면 11회. 실측 0.5초 · 684KB |
 | `pet-tour.sample-size` | 표본으로 확인할 곳 수 | 60회 = 상세 허용량의 2%. ⛔몇 주 뒤 0 으로 끌 것 |
 | `gocamping.list-page-size` | 같음 | 3,200 이면 전량 3,115건이 한 번에. 7.27MB · 1.2초 |
@@ -1373,6 +1530,24 @@ app:
 
 **⛔인증키 환경변수 이름에 소스가 안 들어갑니다.** 포털이 계정마다 키를 하나만 주기 때문입니다.
 기상청·집중률도 같은 계정이라 소스 이름을 붙이면 그때 또 같은 고민을 하게 됩니다.
+
+**`link` 를 따로 둔 이유가 둘입니다.**
+
+```
+성격이 다름   위 값들은 바깥을 부르는 단계의 것임
+             허용량과 초당 제한이 숫자를 정하는 기준인데 넘기는 단계는 그것이 안 걸림
+             ⛔위 chunk-size 20 은 "도중에 죽었을 때 잃는 호출" 을 줄이려고 작게 잡은 값임
+               넘기는 단계는 잃을 호출이 없고 끊기면 처음부터 다시 해 왕복을 줄이는 쪽이 나음
+
+검사가 깨짐   한 레코드에 값을 더하면 그것을 만드는 시험 여섯 곳이 전부 컴파일 실패함
+             소스를 붙일 때마다 겪었고 한 번은 두 곳을 빠뜨려 다시 돌았음
+```
+
+**읽기 제한을 여기에 둔 것도 같은 결입니다.** 전역 `app.rest-client.read-timeout` 이 5초인데
+`place` 가 1,000건을 받아 정규화하고 병합까지 하는 데 십몇 초가 걸립니다.
+전역 값을 늘리면 나중에 생길 다른 서비스 호출까지 함께 느슨해져,
+조회 한 번이 5초 안에 안 와도 기다리게 됩니다.
+**연결 제한은 늘리지 않습니다.** 상대가 떠 있지 않으면 기다릴 이유가 없고 그 판단은 금방 납니다.
 
 ---
 
@@ -1387,6 +1562,10 @@ app:
     max-retries: 0
     retry-backoff-ms: 1000
     max-consecutive-failures: 5
+    link:
+      # 이 시험들은 place 를 부르지 않음, 값이 비면 바인딩이 실패하므로 자리만 채움
+      chunk-size: 100
+      read-timeout-seconds: 5
     pet-tour:
       base-url: http://localhost
       service-key: test-only
@@ -1407,8 +1586,11 @@ app:
 
 그래서 `app.ingest` 블록을 여기에도 적어야 합니다. 안 적으면 검증이 걸린 값 때문에 기동이 실패합니다.
 
-> ⚠**설정을 더할 때 이 파일도 함께 고쳐야 합니다.** 잊으면 빌드가 깨지는데
-> 증상이 `app.ingest.culture 설정이 필요합니다` 라 원인은 바로 드러납니다.
+> ⚠**설정을 더할 때 이 파일도 함께 고쳐야 합니다.** 잊으면 빌드가 깨집니다.
+> 값을 검증하는 애노테이션이 붙어 있으면 증상이 한 겹 더 들어가
+> `BindValidationException` 으로 나오고 어느 값이 비었는지가 바로 안 보입니다.
+> **설정에 검증을 더할 때는 세 곳을 함께 고친다고 생각하십시오.**
+> `config` 저장소의 `{서비스}.yml` · 이 파일 · 그 값을 받는 클래스입니다.
 
 <br><br>
 
@@ -1451,9 +1633,18 @@ curl "http://localhost:8088/internal/ingest/runs?size=5"
 | `PET_TOUR` | `INCREMENTAL` | 매일. 전량이 필요하면 사람이 `FULL` 로 |
 | `GOCAMPING` | `FULL` | 매일. 1회라 부담이 없음 |
 | `CULTURE_CSV` | `FULL` | 파일을 바꿨을 때만 |
+| 소스 셋 | `LINK` | 위가 끝난 뒤. **받은 것이 바뀌었을 때만 의미가 있음** |
 
 > ⛔**`GOCAMPING` 과 `CULTURE_CSV` 에 `INCREMENTAL` 을 주면 501 로 거절합니다.**
 > Jenkins 잡을 만들 때 이 예외를 기억해야 합니다.
+
+**넘기기는 받아 오기 다음입니다.** 같은 소스를 받는 중에는 넘기지 못합니다.
+절반만 있는 상태를 보내게 되기 때문이고, 한 소스에 실행 하나만 돌 수 있게 데이터베이스가 막습니다.
+
+⬜**자동으로 잇지 않습니다.** 받아 오기가 끝나면 `LINK` 를 따로 눌러야 합니다.
+자동으로 이으면 받아 오기만 다시 하고 싶을 때 넘기기까지 딸려 오고,
+무엇을 언제 내보낼지를 사람이 정하지 못하게 됩니다.
+Jenkins 잡을 만들 때 두 단계를 어떻게 엮을지가 판단할 자리입니다.
 
 ⬜**그 Jenkins 잡이 아직 없습니다.** 지금은 사람이 손으로 트리거를 부릅니다.
 레포의 `Jenkinsfile` 은 빌드·배포 파이프라인이라 이것과 별개입니다.
@@ -1885,6 +2076,7 @@ Spring Batch 가 주는 것   청크 · 재시작 · 실행 이력
 | `Command line is too long` | 윈도우. `Shorten command line` → `JAR manifest` |
 | `Detected applied migration not resolved locally` | common jar 가 클래스패스에서 빠짐 |
 | `app.ingest.culture 설정이 필요합니다` | 테스트 리소스 `application.yml` 에 블록이 없음 |
+| `BindValidationException` | 같은 원인인데 검증이 걸린 값임. 어느 값이 비었는지 한 겹 안에 있음 |
 
 ---
 
@@ -1928,7 +2120,49 @@ Spring Batch 가 주는 것   청크 · 재시작 · 실행 이력
 
 ---
 
-### 11-6. 오류로 보이지만 정상인 것
+### 11-6. `place` 에 넘기다 `Read timed out` 이 날 때
+
+```
+증상   I/O error on POST request for "lb://place-service/…": Read timed out
+      5초쯤에 끊기고 실행이 FAILED 로 마감됨
+```
+
+**`app.ingest.link.read-timeout-seconds` 가 안 먹고 있는 것입니다.** 세 가지를 봅니다.
+
+```
+① 설정이 내려왔나        curl 로 config-server 를 찍어 그 키가 보이는지
+                       안 보이면 config 저장소에 push 하고 config-server 를 다시 띄울 것
+② 앱을 다시 켰나         설정도 코드도 기동할 때 읽음.  빌드만 해서는 안 바뀜
+③ 요청 팩터리를 갈아 끼웠나  그 자리를 손대면 공통 설정의 연결 제한이 통째로 날아감
+                       코드에서 다시 세우지 않으면 다른 값이 기본으로 들어감
+```
+
+> ⚠**같은 증상이 원인 셋으로 납니다.** 실제로 세 번 겪었고 매번 달랐습니다.
+> 설정이 안 내려온 것 · 파일을 안 넣은 것 · 앱을 안 켠 것입니다.
+> 로그만 보면 구분이 안 되므로 위 순서로 하나씩 확인하십시오.
+
+---
+
+### 11-7. 넘겼는데 `place_id` 가 안 채워질 때
+
+```
+증상   실행은 DONE 인데 raw_document.place_id 가 그대로 비어 있음
+```
+
+**`changed_count` 를 먼저 보십시오.** 그 값이 0 이면 아무것도 안 채운 것입니다.
+
+```
+fetched  보낸 건수
+changed  실제로 채운 건수
+       ⛔둘이 다른 것은 정상임.  좌표도 주소도 없어 장소를 못 만든 건이 있음
+         고캠핑 2,993건 중 8건이 그렇습니다
+```
+
+둘 다 0 이면 그 소스에 받아 둔 것이 없는 것입니다. 먼저 받아 오기를 돌리십시오.
+
+---
+
+### 11-8. 오류로 보이지만 정상인 것
 
 | 로그 | |
 |---|---|
@@ -1940,7 +2174,7 @@ Spring Batch 가 주는 것   청크 · 재시작 · 실행 이력
 
 ---
 
-### 11-7. PowerShell 에서 걸리는 것
+### 11-9. PowerShell 에서 걸리는 것
 
 ```
 ① curl 이 다른 명령임               ⛔Invoke-WebRequest 로 바뀜.  curl.exe 로 부를 것
@@ -1951,13 +2185,21 @@ Spring Batch 가 주는 것   청크 · 재시작 · 실행 이력
 
 ---
 
-### 11-8. 검증할 때 걸리는 것
+### 11-10. 검증할 때 걸리는 것
 
 ```
 ⛔허용량을 쓰는 것과 안 쓰는 것을 가릴 것
     CULTURE_CSV    0회.  얼마든지 돌려도 됨
     GOCAMPING      1회.  부담 없음
     PET_TOUR       ⛔목록 11회 + 상세 3,237회.  누르기 전에 생각할 것
+    LINK           0회.  다만 place 가 떠 있어야 함
+
+⛔place 로 넘기기는 여러 번 돌려도 됨
+    같은 소스 레코드가 기존 장소를 다시 찾아 붙어 식별자가 안 바뀜
+    ✅장소 수가 안 느는 것으로 확인할 수 있음
+
+⛔PowerShell 에서 $pid 를 쓰지 말 것
+    프로세스 식별자로 예약돼 있어 덮어쓰면 WriteError 가 남
 
 ⛔조립 규칙을 고친 뒤에는 지우고 다시 받을 것
     안 그러면 옛 본문이 그대로 남음
@@ -1990,10 +2232,25 @@ docker compose exec -T postgres psql -U pawtrail -d raw_db \
 
 | | 언제 |
 |---|---|
-| `GET /internal/raw/{placeId}/documents` | `place` 가 생기고 매칭이 돌 때. ⛔지금 만들면 빈 배열만 나옴 |
-| `place_id` 채우기 | 같음. 17,480건이 전부 비어 있음 |
-| `MOIS_VET` 수집 | 2단계. `raw_db` 를 안 거치고 `place` 로 직행 |
+| `MOIS_VET` 수집 | 동물병원 5,474건. `raw_db` 를 안 거치고 `place` 로 직행 |
 | `extract` 가 실제로 가져가기 | 그 서비스를 만들어야 함 |
+
+**`place` 를 기다리던 것들은 끝났습니다.** 넘기기와 원문 조회가 둘 다 돕니다.
+
+```
+17,472건에 place_id 가 채워짐
+     CULTURE_CSV 13,408 · GOCAMPING 2,985 · PET_TOUR 1,079
+     ⛔고캠핑 8건은 좌표도 주소도 없어 장소를 못 만든 것임
+```
+
+⬜**받아 온 것을 손볼 것이 넷 남았습니다.** 전부 다시 받아야 하는 일이라 묶어서 할 자리입니다.
+
+| | |
+|---|---|
+| `source_id` 를 더 길게 | 문화정보원 조합 키가 지금 폭에 빠듯함 |
+| 문화정보원 키에 이름 정규화 | 같은 곳이 둘로 담긴 것이 11건 있음 |
+| 문화정보원 주차 열 확인 | 13,408건이 주차 정보에서 빠졌는지 |
+| `SH04` 8,630곳 | [12-2](#12-2-판단이-남은-것) 의 판단이 먼저 |
 
 ---
 
@@ -2006,6 +2263,33 @@ docker compose exec -T postgres psql -U pawtrail -d raw_db \
 | ⬜고아 `RUNNING` 자동 정리 | 실제로 얼마나 겪는지 보고 |
 | ⬜조립 규칙 재조립 경로 | `PET_TOUR` 는 지우고 다시 받는 것이 나흘치라 다른 길이 필요 |
 | ⬜인증키를 여러 개 쓸지 | 기상청·집중률이 붙어 하루 총 호출량이 나온 뒤 |
+| ⬜`SH04` 8,630곳을 담을지 | 아래 |
+| ⬜`MOIS_VET` 도 원본을 거칠지 | 아래 |
+
+**`SH04` 를 안 담은 근거가 약합니다.**
+
+```
+목록에서 lclsSystm2 가 SH04 인 8,630곳을 「면세점」으로 알고 통째로 뺐음
+⛔실물은 약국 · 의원 · 백화점 · 아울렛 · 갤러리임
+  코드표는 맞았는데 그 코드가 분류 안 된 것을 몰아넣는 자리로 쓰이고 있었음
+
+✅표본 34곳을 실제로 불러 보니 동반 유형 한 칸만 차 있고 나머지 여덟 칸이 전부 비었음
+  약국 · 의원 · 백화점이 전부 같은 값이라 개별 조사가 아니라 일괄 입력으로 보임
+  → "면세점이라 뺐다" 가 아니라 "조건 문장이 없어 뽑을 것이 없다" 가 사실에 가까움
+
+다시 담으려면 상세를 8,630회 불러야 하고 그것은 9일치입니다.
+그 값이 일괄 입력이면 8,630곳에 틀린 안내를 뿌리게 됩니다.
+```
+
+**`MOIS_VET` 은 원본을 안 거치기로 했는데 그 근거가 하나 사라졌습니다.**
+
+```
+그때 근거   조건 문장이 없어 extract 가 뽑을 것이 없음
+지금       원문보기라는 쓰임이 새로 생겼음
+          ⛔동물병원은 「근거 원문 전체 보기」가 영영 빈 목록임
+
+그 소스를 담을지는 그 수집기를 만들 때 함께 정합니다.
+```
 
 ---
 

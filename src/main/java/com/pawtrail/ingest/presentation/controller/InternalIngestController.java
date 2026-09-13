@@ -4,12 +4,15 @@ import com.pawtrail.common.response.CommonApiResponse;
 import com.pawtrail.ingest.application.dto.output.IngestRunStartedOutput;
 import com.pawtrail.ingest.application.dto.output.IngestRunsOutput;
 import com.pawtrail.ingest.application.dto.output.PendingDocumentsOutput;
+import com.pawtrail.ingest.application.dto.output.PlaceDocumentsOutput;
 import com.pawtrail.ingest.application.dto.output.StatusUpdateOutput;
 import com.pawtrail.ingest.application.service.IngestExecutor;
+import com.pawtrail.ingest.application.service.PlaceLinkExecutor;
 import com.pawtrail.ingest.application.service.IngestQueryService;
 import com.pawtrail.ingest.application.service.IngestTriggerService;
 import com.pawtrail.ingest.application.service.RawDocumentStatusService;
 import com.pawtrail.ingest.domain.enums.DocumentStatus;
+import com.pawtrail.ingest.domain.enums.RunType;
 import com.pawtrail.ingest.domain.enums.SourceType;
 import com.pawtrail.ingest.presentation.request.IngestTriggerRequest;
 import com.pawtrail.ingest.presentation.request.RawDocumentStatusRequest;
@@ -21,6 +24,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -53,6 +57,7 @@ public class InternalIngestController {
 
     private final IngestTriggerService ingestTriggerService;
     private final IngestExecutor ingestExecutor;
+    private final PlaceLinkExecutor placeLinkExecutor;
     private final IngestQueryService ingestQueryService;
     private final RawDocumentStatusService rawDocumentStatusService;
 
@@ -73,7 +78,16 @@ public class InternalIngestController {
             @Valid @RequestBody IngestTriggerRequest request) {
 
         UUID runId = ingestTriggerService.startRun(request.source(), request.runType());
-        ingestExecutor.execute(runId);
+
+        // 실행 종류에 따라 이어받는 곳이 다름
+        //
+        // 앞의 둘은 바깥에서 받아 우리 표에 쌓고 마지막 하나는 쌓인 것을 다른 서비스에 보냄
+        // 하는 일이 달라 실행기를 나눴고, 트리거와 실행 기록은 같은 것을 씀
+        if (request.runType() == RunType.LINK) {
+            placeLinkExecutor.execute(runId);
+        } else {
+            ingestExecutor.execute(runId);
+        }
 
         return ResponseEntity
                 .status(HttpStatus.ACCEPTED)
@@ -137,5 +151,27 @@ public class InternalIngestController {
 
         return ResponseEntity.ok(CommonApiResponse.success(
                 rawDocumentStatusService.apply(request.done(), request.failed())));
+    }
+
+    /**
+     * 그 장소가 어느 원본에서 왔는지를 돌려줍니다.
+     *
+     * 장소 서비스의 「근거 원문 전체 보기」가 씁니다.
+     *
+     * 사람이 읽는 문장만 담습니다.
+     * 소스 응답 원본이 필요하면 위 목록 조회를 쓰는데 그쪽은 처리 배치가 쓰는 자리입니다.
+     *
+     * 표시 이름을 담지 않습니다. 부르는 쪽이 이미 가지고 있습니다.
+     *
+     * 문서가 없어도 200 입니다.
+     * 이 서비스는 그 식별자가 실제로 있는 장소인지 알 방법이 없고,
+     * 원본을 거치지 않는 소스로만 만들어진 장소는 원문이 아예 없습니다.
+     */
+    @GetMapping("/raw/{placeId}/documents")
+    public ResponseEntity<CommonApiResponse<PlaceDocumentsOutput>> getPlaceDocuments(
+            @PathVariable UUID placeId) {
+
+        return ResponseEntity.ok(
+                CommonApiResponse.success(ingestQueryService.getPlaceDocuments(placeId)));
     }
 }

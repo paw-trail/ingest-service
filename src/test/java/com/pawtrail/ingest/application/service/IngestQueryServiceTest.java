@@ -9,6 +9,8 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pawtrail.ingest.application.dto.output.PendingDocumentsOutput;
+import com.pawtrail.ingest.application.dto.output.PlaceDocumentsOutput;
+import com.pawtrail.ingest.application.dto.output.RawDocumentViewOutput;
 import com.pawtrail.ingest.domain.enums.DocumentStatus;
 import com.pawtrail.ingest.domain.enums.RunType;
 import com.pawtrail.ingest.domain.enums.SourceType;
@@ -19,7 +21,9 @@ import com.pawtrail.ingest.domain.repository.RawDocumentRepository;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -153,6 +157,79 @@ class IngestQueryServiceTest {
         // 사람이 승인을 판단하는 값이 바뀐 건수와 진행 상태임
         assertThat(output.progress()).isNotNull();
         assertThat(output.errorMessage()).contains("detailIntro2").contains("건너뜀 1건");
+    }
+
+    @Nested
+    @DisplayName("장소의 원문")
+    class 장소의_원문 {
+
+        private static final UUID PLACE_A =
+                UUID.fromString("aaaaaaaa-0000-7000-8000-000000000001");
+
+        @Test
+        @DisplayName("사람이 읽는 문장만 담는다")
+        void 표시용만_담는다() {
+            when(rawDocumentRepository.findByPlaceId(PLACE_A))
+                    .thenReturn(List.of(linked(SourceType.PET_TOUR, "와룡공원")));
+
+            PlaceDocumentsOutput output = service().getPlaceDocuments(PLACE_A);
+
+            // 원본을 그대로 주면 고캠핑의 관리자 이름과 사업자번호가 화면까지 흘러감
+            assertThat(output.documents()).hasSize(1);
+            assertThat(RawDocumentViewOutput.class.getRecordComponents())
+                    .extracting(java.lang.reflect.RecordComponent::getName)
+                    .doesNotContain("payload", "contentHash", "sourceLabel");
+        }
+
+        @Test
+        @DisplayName("소스 열거값의 차례로 정렬한다")
+        void 대표_순서() {
+            when(rawDocumentRepository.findByPlaceId(PLACE_A)).thenReturn(List.of(
+                    linked(SourceType.CULTURE_CSV, "와룡공원"),
+                    linked(SourceType.PET_TOUR, "와룡공원"),
+                    linked(SourceType.GOCAMPING, "와룡공원")));
+
+            // 장소 상세의 출처 뱃지가 이 차례로 나오므로 원문 카드도 같아야 함
+            // 이름차례로 두면 CULTURE_CSV 가 앞에 와 어긋남
+            assertThat(service().getPlaceDocuments(PLACE_A).documents())
+                    .extracting(RawDocumentViewOutput::source)
+                    .containsExactly(
+                            SourceType.PET_TOUR, SourceType.GOCAMPING, SourceType.CULTURE_CSV);
+        }
+
+        @Test
+        @DisplayName("문서가 없으면 빈 목록이다")
+        void 빈_목록() {
+            when(rawDocumentRepository.findByPlaceId(PLACE_A)).thenReturn(List.of());
+
+            // 없는 장소인지 아직 안 넘긴 장소인지 이 서비스는 알 수 없음
+            // 원본을 거치지 않는 소스로만 만들어진 장소도 여기로 옴
+            assertThat(service().getPlaceDocuments(PLACE_A).documents()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("본문이 비어 있어도 담는다")
+        void 본문_없음() {
+            RawDocument document = RawDocument.create(
+                    SourceType.PET_TOUR, "1019041", "{}", "와룡공원", null,
+                    "hash", null, LocalDateTime.now());
+            document.linkPlace(PLACE_A);
+            when(rawDocumentRepository.findByPlaceId(PLACE_A)).thenReturn(List.of(document));
+
+            // 조건과 개요와 소개가 전부 빈 건이 일곱 있음
+            // 카드를 숨길지 "내용 없음" 을 띄울지는 보여주는 쪽이 정함
+            RawDocumentViewOutput view = service().getPlaceDocuments(PLACE_A).documents().get(0);
+            assertThat(view.title()).isEqualTo("와룡공원");
+            assertThat(view.body()).isNull();
+        }
+
+        private RawDocument linked(SourceType source, String title) {
+            RawDocument document = RawDocument.create(
+                    source, "1019041", "{}", title, "[동반 유형] 전구역 동반가능",
+                    "hash", null, LocalDateTime.now());
+            document.linkPlace(PLACE_A);
+            return document;
+        }
     }
 
     private IngestQueryService service() {
