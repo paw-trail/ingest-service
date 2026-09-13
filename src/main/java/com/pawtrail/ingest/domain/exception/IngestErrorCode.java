@@ -133,7 +133,22 @@ public enum IngestErrorCode implements ErrorCode {
     // 어느 것으로 둘지 우리가 고를 수 없으므로 거절함
     // 부르는 쪽의 실수이고 조용히 한쪽을 택하면 그 판단이 어디에도 안 남음
     RAW_DOCUMENT_STATUS_CONFLICT(
-            HttpStatus.BAD_REQUEST, "같은 문서가 처리 완료와 실패에 함께 있습니다.");
+            HttpStatus.BAD_REQUEST, "같은 문서가 처리 완료와 실패에 함께 있습니다."),
+
+    // 장소 서비스에 넘기지 못함
+    //
+    // * 실행을 그 자리에서 멈춤
+    //   상대가 한 서비스라 한 묶음이 실패하면 다음 묶음도 같은 이유로 실패함
+    //   계속 보내면 같은 오류를 쌓기만 하고 끝난 뒤에도 무엇이 들어갔는지 알 수 없음
+    //
+    // * 이어받지 않음
+    //   보낸 것을 다시 보내도 상대가 같은 결과를 내므로 처음부터 다시 하면 됨
+    //   어디까지 갔는지를 남기면 그 정확성을 또 검증해야 하는데 얻는 것이 없음
+    //
+    // * 502 인 이유
+    //   우리 잘못도 부르는 쪽 잘못도 아니고 뒤에 있는 서비스가 답하지 않은 것임
+    //   소스 API 실패를 502 로 둔 것과 같은 자리임
+    PLACE_LINK_FAILED(HttpStatus.BAD_GATEWAY, "장소 서비스에 넘기지 못했습니다.");
 
     private final HttpStatus httpStatus;
     private final String message;

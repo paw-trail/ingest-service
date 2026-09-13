@@ -47,4 +47,12 @@ public interface RawDocumentJpaRepository extends JpaRepository<RawDocument, UUI
      * 식별자가 시각 순서를 담은 uuid v7 이라 이 정렬이 받아 온 순서와 어긋나지 않습니다.
      */
     List<RawDocument> findBySourceOrderByFetchedAtAscIdAsc(SourceType source, Pageable pageable);
+
+    /**
+     * 그 소스의 원본을 식별자 순으로 돌려줍니다.
+     *
+     * 장소 서비스로 넘길 때 씁니다.
+     * 식별자에 기본 키 인덱스가 있어 정렬에 따로 드는 비용이 없습니다.
+     */
+    Page<RawDocument> findBySourceOrderByIdAsc(SourceType source, Pageable pageable);
 }

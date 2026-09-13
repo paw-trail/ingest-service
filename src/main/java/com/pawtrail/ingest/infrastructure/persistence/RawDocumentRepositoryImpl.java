@@ -68,4 +68,9 @@ public class RawDocumentRepositoryImpl implements RawDocumentRepository {
         return rawDocumentJpaRepository
                 .findBySourceOrderByFetchedAtAscIdAsc(source, PageRequest.ofSize(size));
     }
+
+    @Override
+    public Page<RawDocument> findBySource(SourceType source, Pageable pageable) {
+        return rawDocumentJpaRepository.findBySourceOrderByIdAsc(source, pageable);
+    }
 }

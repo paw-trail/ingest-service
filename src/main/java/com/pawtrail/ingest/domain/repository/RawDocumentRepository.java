@@ -67,6 +67,21 @@ public interface RawDocumentRepository {
     List<RawDocument> findAllByIds(Collection<UUID> ids);
 
     /**
+     * 그 소스의 원본을 식별자 순으로 한 쪽씩 돌려줍니다.
+     *
+     * 장소 서비스로 넘길 때 씁니다.
+     *
+     * 쪽 번호로 넘겨도 됩니다.
+     * 대기 목록과 달리 이 조회는 도는 동안 대상이 줄지 않습니다.
+     * 장소 식별자를 채우는 것뿐이라 행이 조건에서 빠지지 않기 때문입니다.
+     *
+     * 식별자 순으로 정렬합니다.
+     * 순서가 정해져 있지 않으면 쪽을 넘길 때 같은 행이 두 번 나오거나 한 행이 통째로 빠집니다.
+     * 식별자가 시간순으로 만들어지는 값이라 그 순서가 곧 받아 온 순서이기도 합니다.
+     */
+    Page<RawDocument> findBySource(SourceType source, Pageable pageable);
+
+    /**
      * 그 소스의 식별자와 수정 시각만 한 번에 읽어 옵니다.
      *
      * 증분 수집이 상세를 부를지 판단하는 자리입니다.
