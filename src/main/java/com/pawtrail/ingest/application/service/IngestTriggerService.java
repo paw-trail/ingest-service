@@ -5,6 +5,7 @@ import com.pawtrail.ingest.domain.enums.RunType;
 import com.pawtrail.ingest.domain.enums.SourceType;
 import com.pawtrail.ingest.domain.exception.IngestErrorCode;
 import com.pawtrail.ingest.domain.model.IngestRun;
+import com.pawtrail.ingest.domain.provider.PlaceItemConverter;
 import com.pawtrail.ingest.domain.provider.SourceCollector;
 import com.pawtrail.ingest.domain.repository.IngestRunRepository;
 import java.util.List;
@@ -33,20 +34,54 @@ public class IngestTriggerService {
 
     private final IngestRunRepository ingestRunRepository;
     private final List<SourceCollector> collectors;
+    private final List<PlaceItemConverter> converters;
 
     public IngestTriggerService(
-            IngestRunRepository ingestRunRepository, List<SourceCollector> collectors) {
+            IngestRunRepository ingestRunRepository,
+            List<SourceCollector> collectors,
+            List<PlaceItemConverter> converters) {
 
         this.ingestRunRepository = ingestRunRepository;
         this.collectors = collectors;
+        this.converters = converters;
+    }
+
+    /**
+     * 그 실행 종류를 실제로 돌릴 구현이 있는지 봅니다.
+     *
+     * 실행기가 셋이 되면서 보는 대상이 갈렸습니다.
+     *
+     * <pre>
+     * FULL · INCREMENTAL   SourceCollector    바깥에서 받아 우리 표에 담음
+     * LINK                 SourceCollector    우리 표를 읽어 넘김.  담은 소스만 해당하므로 같음
+     * DIRECT               PlaceItemConverter 파일을 읽어 바로 보냄.  수집기가 없음
+     * </pre>
+     *
+     * 수집기만 보던 때는 그것으로 충분했습니다.
+     * 앞의 셋은 전부 원본을 담는 소스라 수집기가 있었기 때문입니다.
+     * 원본을 담지 않는 소스에 DIRECT 가 생기면서 그 전제가 깨졌습니다.
+     *
+     * 검사를 건너뛰지 않는 것이 중요합니다.
+     * 건너뛰면 변환기를 만들지 않은 채로도 202 와 실행 식별자가 나가고,
+     * 실행 기록을 열어 봐야 실패라는 것을 알게 됩니다.
+     * 그리고 넘기기 실행기가 "트리거가 이미 확인한다" 는 전제 위에서
+     * 같은 검사를 한 번 더 하고 있어, 여기가 비면 두 겹이 한 겹이 됩니다.
+     */
+    private boolean hasImplementation(SourceType source, RunType runType) {
+        if (runType == RunType.DIRECT) {
+            return converters.stream().anyMatch(converter -> converter.source() == source);
+        }
+        return collectors.stream().anyMatch(collector -> collector.source() == source);
     }
 
     /**
      * 실행을 만들고 식별자를 돌려줍니다.
      *
-     * 수집기가 없으면 실행을 만들지 않고 거절합니다.
+     * 부를 구현이 없으면 실행을 만들지 않고 거절합니다.
      * 만들어 두고 곧바로 실패로 마감하면 아무 일도 안 한 행이 이력에 남고,
      * 그것을 재개 대상으로 착각할 여지가 생깁니다.
+     *
+     * 무엇을 보는지는 실행 종류마다 다릅니다. 아래 hasImplementation 을 보십시오.
      *
      * 증분 수집도 같은 자리에서 거절합니다.
      * 아직 만들지 않은 기능인데 막지 않으면 조용히 전량 수집이 돌아
@@ -67,9 +102,7 @@ public class IngestTriggerService {
      */
     @Transactional
     public UUID startRun(SourceType source, RunType runType) {
-        boolean supported = collectors.stream()
-                .anyMatch(collector -> collector.source() == source);
-        if (!supported) {
+        if (!hasImplementation(source, runType)) {
             throw new CustomException(IngestErrorCode.COLLECTOR_NOT_REGISTERED);
         }
 
