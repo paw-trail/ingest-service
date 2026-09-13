@@ -8,8 +8,11 @@ import com.pawtrail.ingest.domain.provider.dto.PlaceLinkResult;
 import com.pawtrail.ingest.infrastructure.config.PlaceLinkProperties;
 import com.pawtrail.common.exception.CustomException;
 import java.time.Duration;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.ParameterizedTypeReference;
@@ -66,6 +69,58 @@ public class PlaceLinkClientImpl implements PlaceLinkClient {
     }
 
     /**
+     * 돌려받은 짝이 약속대로인지 봅니다.
+     *
+     * 어긋나면 그 자리에서 멈춥니다. 고쳐서 쓰지 않습니다.
+     * 한 건이 약속과 다르다는 것은 응답 전체를 믿을 수 없다는 뜻이고,
+     * 이 값으로 우리 표의 장소 식별자를 채우기 때문에 잘못 채우면 되돌릴 방법이 없습니다.
+     *
+     * 세 가지를 봅니다.
+     *
+     * 장소 식별자가 비어 있으면 안 됩니다.
+     * 그대로 채우면 이미 이어 둔 연결을 지우게 되는데 오류가 나지 않아 드러나지 않습니다.
+     * 장소를 만들지 못한 레코드는 짝 자체가 오지 않기로 되어 있습니다.
+     *
+     * 보낸 적 없는 것이 오면 안 됩니다.
+     * 소스까지 함께 봅니다. 소스 식별자만 보면 다른 데이터셋의 같은 번호를 우리 것으로 착각합니다.
+     *
+     * 같은 짝이 두 번 오면 안 됩니다.
+     * 그러면 채운 건수가 부풀려져 실행 기록의 숫자를 믿을 수 없게 됩니다.
+     */
+    private void verify(List<PlaceBulkItem> items, PlaceLinkResult result) {
+        Set<String> sent = items.stream()
+                .map(item -> key(item.source(), item.sourceId()))
+                .collect(Collectors.toSet());
+
+        Set<String> seen = new HashSet<>();
+        for (PlaceLinkResult.SourceLink link : result.links()) {
+            if (link.placeId() == null) {
+                reject("장소 식별자가 비어 있습니다", link);
+            }
+            String key = key(link.source(), link.sourceId());
+            if (!sent.contains(key)) {
+                reject("보낸 적 없는 레코드입니다", link);
+            }
+            if (!seen.add(key)) {
+                reject("같은 레코드가 두 번 왔습니다", link);
+            }
+        }
+    }
+
+    private void reject(String reason, PlaceLinkResult.SourceLink link) {
+        log.error("장소 서비스 응답이 약속과 다릅니다: {} source={} sourceId={} placeId={}",
+                reason, link.source(), link.sourceId(), link.placeId());
+        throw new CustomException(IngestErrorCode.PLACE_LINK_FAILED);
+    }
+
+    // 소스와 소스 식별자를 한 열쇠로 묶음
+    //
+    // 소스 식별자만으로는 데이터셋이 다른 같은 번호를 가를 수 없음
+    private static String key(Object source, String sourceId) {
+        return source + "\u0000" + sourceId;
+    }
+
+    /**
      * 이 호출만 쓰는 시간 제한을 만듭니다.
      *
      * 읽기만 늘리고 연결은 공통 값을 그대로 씁니다.
@@ -107,7 +162,9 @@ public class PlaceLinkClientImpl implements PlaceLinkClient {
                 throw new CustomException(IngestErrorCode.PLACE_LINK_FAILED);
             }
 
-            return response.getData();
+            PlaceLinkResult result = response.getData();
+            verify(items, result);
+            return result;
 
         } catch (CustomException e) {
             throw e;

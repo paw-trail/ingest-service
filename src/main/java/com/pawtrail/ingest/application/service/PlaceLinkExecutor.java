@@ -121,11 +121,15 @@ public class PlaceLinkExecutor {
                     break;
                 }
 
-                // 소스 식별자로 원본을 되찾는 표임
+                // 소스와 소스 식별자로 원본을 되찾는 표임
                 //
-                // 돌려받는 것이 소스 식별자와 장소 식별자의 짝이라
+                // 돌려받는 것이 그 짝과 장소 식별자라
                 // 우리 표의 어느 행인지는 우리가 기억하고 있어야 함
-                Map<String, UUID> rawIdBySourceId = new LinkedHashMap<>();
+                //
+                // 소스까지 열쇠에 넣음
+                // 한 실행은 한 소스만 다루나 그것은 지금 부르는 쪽 사정이고,
+                // 다른 데이터셋의 같은 번호가 섞여 오면 소스 식별자만으로는 가를 수 없음
+                Map<String, UUID> rawIdByKey = new LinkedHashMap<>();
                 List<PlaceBulkItem> items = new ArrayList<>(page.getNumberOfElements());
 
                 for (RawDocument document : page.getContent()) {
@@ -135,13 +139,15 @@ public class PlaceLinkExecutor {
                         continue;
                     }
                     items.add(item);
-                    rawIdBySourceId.put(document.getSourceId(), document.getId());
+                    rawIdByKey.put(
+                            PlaceLinkWriter.key(document.getSource(), document.getSourceId()),
+                            document.getId());
                 }
 
                 if (!items.isEmpty()) {
                     PlaceLinkResult result = placeLinkClient.send(items);
                     linkedTotal += placeLinkWriter.applyChunk(
-                            runId, items.size(), rawIdBySourceId, result);
+                            runId, items.size(), rawIdByKey, result);
                     sentTotal += items.size();
                 }
 

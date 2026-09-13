@@ -2,6 +2,7 @@ package com.pawtrail.ingest.application.service;
 
 import com.pawtrail.common.exception.CustomException;
 import com.pawtrail.ingest.domain.exception.IngestErrorCode;
+import com.pawtrail.ingest.domain.enums.SourceType;
 import com.pawtrail.ingest.domain.model.IngestRun;
 import com.pawtrail.ingest.domain.model.RawDocument;
 import com.pawtrail.ingest.domain.provider.dto.PlaceLinkResult;
@@ -55,16 +56,20 @@ public class PlaceLinkWriter {
      * 실행 기록에는 보낸 수와 채운 수를 더합니다.
      * 진행 위치는 남기지 않습니다. 끊기면 처음부터 다시 하기로 했기 때문입니다.
      *
-     * @param rawIdBySourceId 그 묶음에서 소스 식별자로 원본 식별자를 찾는 표
-     * @param result          장소 서비스가 돌려준 것
+     * 여기서 약속을 다시 검사하지 않습니다.
+     * 장소 식별자가 비었는지, 보낸 적 없는 것인지, 같은 것이 두 번 왔는지는
+     * 응답을 읽는 자리가 이미 보고 어긋나면 이 메서드를 부르지 않습니다.
+     *
+     * @param rawIdByKey 그 묶음에서 소스와 소스 식별자로 원본 식별자를 찾는 표
+     * @param result     장소 서비스가 돌려준 것
      * @return 실제로 채운 건수
      */
     @Transactional
     public int applyChunk(UUID runId, int sentCount,
-                          Map<String, UUID> rawIdBySourceId, PlaceLinkResult result) {
+                          Map<String, UUID> rawIdByKey, PlaceLinkResult result) {
 
         List<UUID> rawIds = result.links().stream()
-                .map(link -> rawIdBySourceId.get(link.sourceId()))
+                .map(link -> rawIdByKey.get(key(link.source(), link.sourceId())))
                 .filter(Objects::nonNull)
                 .toList();
 
@@ -73,20 +78,22 @@ public class PlaceLinkWriter {
 
         int linked = 0;
         for (PlaceLinkResult.SourceLink link : result.links()) {
-            UUID rawId = rawIdBySourceId.get(link.sourceId());
+            UUID rawId = rawIdByKey.get(key(link.source(), link.sourceId()));
             if (rawId == null) {
-                // 우리가 보낸 적 없는 식별자가 돌아온 것임
+                // 응답을 읽는 자리가 이미 걸렀어야 하는 값임
                 //
-                // 닿지 않아야 하는 자리이고 닿는다면 양쪽 계약이 어긋난 것임
-                // 한 건 때문에 묶음을 죽이지는 않고 기록만 남김
-                log.warn("보낸 적 없는 소스 식별자가 돌아왔습니다. runId={} source={} sourceId={}",
+                // 닿는다면 그쪽 검사와 이 표를 만드는 코드가 어긋난 것임
+                log.error("보낸 적 없는 레코드가 여기까지 왔습니다. runId={} source={} sourceId={}",
                         runId, link.source(), link.sourceId());
-                continue;
+                throw new CustomException(IngestErrorCode.PLACE_LINK_FAILED);
             }
             RawDocument document = found.get(rawId);
             if (document == null) {
-                log.warn("원본을 찾지 못했습니다. runId={} rawId={}", runId, rawId);
-                continue;
+                // 방금 그 식별자로 읽어 왔는데 없는 경우임
+                //
+                // 그 사이에 누가 지운 것이라 이 묶음의 다른 건도 믿을 수 없음
+                log.error("원본을 찾지 못했습니다. runId={} rawId={}", runId, rawId);
+                throw new CustomException(IngestErrorCode.PLACE_LINK_FAILED);
             }
             document.linkPlace(link.placeId());
             rawDocumentRepository.save(document);
@@ -100,5 +107,13 @@ public class PlaceLinkWriter {
         log.debug("묶음을 반영했습니다. runId={} sent={} linked={} created={} merged={} skipped={}",
                 runId, sentCount, linked, result.created(), result.merged(), result.skipped());
         return linked;
+    }
+
+    // 소스와 소스 식별자를 한 열쇠로 묶음
+    //
+    // 소스 식별자만으로는 데이터셋이 다른 같은 번호를 가를 수 없음
+    // 응답을 읽는 자리가 쓰는 것과 같은 방식이어야 함
+    static String key(SourceType source, String sourceId) {
+        return source + "\u0000" + sourceId;
     }
 }
