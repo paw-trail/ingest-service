@@ -82,6 +82,20 @@ public interface RawDocumentRepository {
     Page<RawDocument> findBySource(SourceType source, Pageable pageable);
 
     /**
+     * 그 장소에 이어진 원본을 돌려줍니다.
+     *
+     * 「근거 원문 전체 보기」가 씁니다.
+     *
+     * 소스가 여럿이면 여럿입니다.
+     * 세 데이터셋이 같은 장소를 가리켜 병합된 곳이 백마흔일곱 군데 있습니다.
+     *
+     * 페이징을 두지 않습니다.
+     * 한 장소에 이어질 수 있는 원본이 소스 수만큼이라 많아야 셋입니다.
+     * 쪽을 나누면 부르는 쪽이 쪽을 넘기는 코드를 짜야 하는데 넘길 쪽이 생기지 않습니다.
+     */
+    List<RawDocument> findByPlaceId(UUID placeId);
+
+    /**
      * 그 소스의 식별자와 수정 시각만 한 번에 읽어 옵니다.
      *
      * 증분 수집이 상세를 부를지 판단하는 자리입니다.
