@@ -214,7 +214,8 @@ class GoCampingCollectorTest {
                 new IngestProperties.PetTour("https://example.test", "test-only", 100, 0),
                 new IngestProperties.GoCamping(
                         "https://example.test", "test-only", listPageSize),
-                new IngestProperties.Culture("build/tmp/test-culture.csv"));
+                new IngestProperties.Culture("build/tmp/test-culture.csv"),
+                new IngestProperties.MoisVet("build/tmp/test-mois-vet.csv", "CP949"));
         return new GoCampingCollector(client, assembler, properties);
     }
 

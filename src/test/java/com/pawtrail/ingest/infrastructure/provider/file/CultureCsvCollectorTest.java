@@ -2,6 +2,7 @@ package com.pawtrail.ingest.infrastructure.provider.file;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.when;
 
 import com.pawtrail.ingest.domain.enums.RunType;
@@ -37,7 +38,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class CultureCsvCollectorTest {
 
     @Mock
-    private CultureCsvReader reader;
+    private CsvReader reader;
 
     private final CultureDisplayBodyAssembler assembler = new CultureDisplayBodyAssembler();
 
@@ -264,10 +265,13 @@ class CultureCsvCollectorTest {
      *
      * 실물 리더가 목록을 만들지 않고 행마다 콜백을 부르므로 시늉도 같아야 합니다.
      * 그래야 수집기가 읽는 도중에 거르는 것을 그대로 확인합니다.
+     *
+     * 리더가 인코딩과 컬럼 수와 필수 컬럼을 함께 받게 되어 콜백이 다섯 번째 인자입니다.
+     * 소스가 둘이 되면서 읽는 쪽을 하나로 합쳤고 그 넷만 값으로 갈립니다.
      */
     private void given(List<Map<String, String>> rows) {
-        when(reader.read(any(), any())).thenAnswer(invocation -> {
-            Consumer<Map<String, String>> rowSink = invocation.getArgument(1);
+        when(reader.read(any(), any(), anyInt(), any(), any())).thenAnswer(invocation -> {
+            Consumer<Map<String, String>> rowSink = invocation.getArgument(4);
             rows.forEach(rowSink);
             return rows.size();
         });
@@ -278,7 +282,8 @@ class CultureCsvCollectorTest {
                 chunkSize, 0, 0, 1000, 5,
                 new IngestProperties.PetTour("http://localhost", "test-only", 100, 0),
                 new IngestProperties.GoCamping("http://localhost", "test-only", 100),
-                new IngestProperties.Culture("build/tmp/test-culture.csv"));
+                new IngestProperties.Culture("build/tmp/test-culture.csv"),
+                new IngestProperties.MoisVet("build/tmp/test-mois-vet.csv", "CP949"));
         return new CultureCsvCollector(reader, assembler, properties);
     }
 

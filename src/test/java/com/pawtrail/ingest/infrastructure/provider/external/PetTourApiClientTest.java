@@ -196,7 +196,8 @@ class PetTourApiClientTest {
                 20, 0, maxRetries, 1, 5,
                 new IngestProperties.PetTour(baseUrl(), "test-only", 1000, 0),
                 new IngestProperties.GoCamping("http://localhost", "test-only", 3200),
-                new IngestProperties.Culture("build/tmp/test-culture.csv"));
+                new IngestProperties.Culture("build/tmp/test-culture.csv"),
+                new IngestProperties.MoisVet("build/tmp/test-mois-vet.csv", "CP949"));
         return new PetTourApiClient(RestClient.builder(), new ObjectMapper(), properties);
     }
 
