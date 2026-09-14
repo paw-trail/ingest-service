@@ -65,41 +65,46 @@ B,V,G,O,P,X,L="#3B82F6","#6366F1","#16A34A","#F97316","#A855F7","#9CA3AF","#D977
 
 
 # ── ingest-service
-d=D(1860,900)
-d.me("ig",800,450,360,110,"dom","ingest-service  :8088",
+d=D(1980,1010)
+d.me("ig",840,470,380,110,"dom","ingest-service  :8088",
      "공공데이터를 받아 담고 place 로 넘김|API 5개 · 화면 없음 · 상시 미기동")
 
 d.node("jk",180,140,260,90,"fut","Jenkins 잡","수집을 언제 부를지 정함|아직 없음",dash=True)
 d.node("api",180,360,260,100,"ext","공공데이터포털","반려동물 동반여행 · 고캠핑|오퍼레이션마다 하루 1,000회",dash=True)
-d.node("csv",180,580,260,90,"ext","문화정보원 CSV","이미지 안에 담겨 있음|바깥을 부르지 않음")
-d.node("gw",180,790,260,70,"edge","gateway-server","여기로는 라우팅하지 않음",dash=True)
+d.node("csv",180,590,260,100,"ext","CSV 파일 둘","문화정보원 · 행정안전부|이미지 안에 담겨 있음")
+d.node("gw",180,830,260,70,"edge","gateway-server","여기로는 라우팅하지 않음",dash=True)
 
-d.node("cf",800,120,320,80,"plat","config-server","포트 · DB · 인증키 · 소스별 값")
-d.node("eu",1520,110,300,80,"plat","eureka-server","등록")
-d.node("pg",1520,300,300,100,"data","PostgreSQL  raw_db","raw_document 17,480건 · place_id 17,472|ingest_run  (표 2개)")
-d.node("ex",1520,560,300,100,"domn","extract-service","대기 문서를 가져가 해석|아직 없음")
-d.node("pl",1520,780,300,100,"domn","place-service","소스가 겹친 것을 한 장소로|넘긴 결과를 돌려줌")
+d.node("cf",840,120,320,80,"plat","config-server","포트 · DB · 인증키 · 소스별 값")
+d.node("eu",1640,110,300,80,"plat","eureka-server","등록")
+d.node("pg",1640,310,300,110,"data","PostgreSQL  raw_db",
+       "raw_document 17,471건 · place_id 17,463|ingest_run  (표 2개)|소스 넷 가운데 셋만 담김")
+d.node("ex",1640,570,300,100,"domn","extract-service","대기 문서를 가져가 해석|아직 없음")
+d.node("pl",1640,830,300,110,"domn","place-service","소스가 겹친 것을 한 장소로|넘긴 결과를 돌려줌|동물병원은 바로 받음")
 
 d.edge("jk","r","ig","l",X,"POST /internal/ingest/trigger",dash=True,
-       via=[(500,140),(500,420)],b_pt=(620,420),lx=330,ly=132,anchor="start")
+       via=[(520,140),(520,440)],b_pt=(650,440),lx=340,ly=132,anchor="start")
 d.edge("ig","l","api","r",O,"목록 · 상세를 부름",dash=True,
-       a_pt=(620,450),via=[(500,450),(500,360)],lx=330,ly=345,anchor="start")
+       a_pt=(650,470),via=[(520,470),(520,360)],lx=340,ly=345,anchor="start")
 d.edge("csv","r","ig","l",O,"파일을 읽음",
-       via=[(500,580),(500,480)],b_pt=(620,480),lx=510,ly=545,anchor="start")
+       via=[(520,590),(520,500)],b_pt=(650,500),lx=530,ly=560,anchor="start")
 d.edge("gw","r","ig","b",X,"라우팅하지 않음",dash=True,
-       via=[(560,790),(560,540)],b_pt=(700,505),lx=570,ly=700,anchor="start")
+       via=[(600,830),(600,560)],b_pt=(760,525),lx=610,ly=730,anchor="start")
 
 d.edge("cf","b","ig","t",V,"기동 시 설정")
-d.edge("ig","r","eu","l",V,"등록",via=[(1220,450),(1220,110)],lx=1230,ly=250,anchor="start")
+d.edge("ig","r","eu","l",V,"등록",via=[(1300,470),(1300,110)],lx=1310,ly=260,anchor="start")
 d.edge("ig","r","pg","l",O,"JPA · Flyway V20 · V21",
-       via=[(1220,450),(1220,300)],lx=1230,ly=370,anchor="start")
+       via=[(1300,470),(1300,310)],lx=1310,ly=385,anchor="start")
 d.edge("ex","l","ig","r",G,"GET /internal/raw · PATCH 로 결과 반영",
-       a_pt=(1370,560),via=[(1100,560),(1100,470)],b_pt=(980,470),lx=1360,ly=552,anchor="end")
-d.edge("ig","r","pl","l",G,"POST /internal/places/bulk  →  place_id 를 돌려받음",
-       a_pt=(980,495),via=[(1300,495),(1300,760)],b_pt=(1370,760),lx=1310,ly=640,anchor="start")
-d.edge("pl","l","ig","r",G,"GET /internal/raw/{placeId}/documents",
-       a_pt=(1370,810),via=[(1180,810),(1180,505)],b_pt=(980,505),lx=1000,ly=800,anchor="start")
+       a_pt=(1490,570),via=[(1180,570),(1180,490)],b_pt=(1030,490),lx=1480,ly=562,anchor="end")
 
-d.note(40,858,"게이트웨이가 /internal 을 라우팅하지 않음 — 화면이 없고 부르는 것이 Jenkins 잡과 extract 와 place 뿐임 · Kafka 를 쓰지 않아 이벤트를 발행하지도 받지도 않음")
-d.note(40,880,"관광공사 상세는 한 번에 3,237회라 하루 한도를 넘김 — 그날 받은 데까지 기록하고 다음 날 그 자리부터 이어받음 · 원문은 고치지 않고 담고 해석은 extract 가 함")
+# place 로 가는 길이 둘 — 담아 둔 것을 넘기는 것과 바로 보내는 것
+d.edge("ig","r","pl","l",G,"LINK  소스 셋을 담아 둔 뒤 넘김",
+       a_pt=(1030,512),via=[(1390,512),(1390,800)],b_pt=(1490,800),lx=1400,ly=690,anchor="start")
+d.edge("pl","l","ig","r",G,"GET /internal/raw/{placeId}/documents",
+       a_pt=(1490,858),via=[(1250,858),(1250,532)],b_pt=(1030,532),lx=1050,ly=850,anchor="start")
+d.edge("ig","b","pl","b",G,"DIRECT  raw 를 거치지 않고 바로",
+       a_pt=(900,525),via=[(900,940),(1560,940)],b_pt=(1560,885),lx=910,ly=930,anchor="start")
+
+d.note(40,968,"소스가 넷인데 셋만 raw_db 에 담김 — 행정안전부 동물병원은 조건 문장이 없어 해석할 것도 원문으로 보여줄 것도 없어, 읽는 자리에서 바로 place 로 보냄")
+d.note(40,990,"관광공사 상세는 한 번에 3,237회라 하루 한도를 넘김 — 그날 받은 데까지 기록하고 다음 날 그 자리부터 이어받음 · 게이트웨이가 /internal 을 라우팅하지 않고 Kafka 도 쓰지 않음")
 d.save("ingest-service","ingest-service 를 중심으로 · 직접 연결된 것만")
