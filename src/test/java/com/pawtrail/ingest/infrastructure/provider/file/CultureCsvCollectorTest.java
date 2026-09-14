@@ -2,6 +2,7 @@ package com.pawtrail.ingest.infrastructure.provider.file;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.when;
 
 import com.pawtrail.ingest.domain.enums.RunType;
@@ -37,7 +38,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class CultureCsvCollectorTest {
 
     @Mock
-    private CultureCsvReader reader;
+    private CsvReader reader;
 
     private final CultureDisplayBodyAssembler assembler = new CultureDisplayBodyAssembler();
 
@@ -128,6 +129,70 @@ class CultureCsvCollectorTest {
     }
 
     @Test
+    @DisplayName("시설명 가운데 공백이 달라도 같은 식별자로 본다")
+    void ignoresInnerSpacesInName() {
+        Map<String, String> spaced = row("박영재 동물병원", "전라북도 전주시 완산구 서서학동 219-1",
+                "동물병원", "2025-03-24");
+        Map<String, String> tight = row("박영재동물병원", "전라북도 전주시 완산구 서서학동 219-1",
+                "동물병원", "2025-03-24");
+        given(List.of(spaced, tight));
+
+        collector(100).collect(freshContext(), chunks::add);
+
+        // 걷어내지 않으면 키가 갈려 유일 제약에 안 걸리고 문서가 둘 들어감
+        assertThat(chunks.get(0)).hasSize(1);
+        assertThat(chunks.get(0).get(0).sourceId())
+                .isEqualTo("박영재동물병원|전라북도 전주시 완산구 서서학동 219-1");
+    }
+
+    @Test
+    @DisplayName("식별자에서 공백을 걷어내도 표시 이름은 원본 표기를 그대로 둔다")
+    void keepsRawNameInDisplayTitle() {
+        given(List.of(row("도그 앤 피플 동물병원", "울산광역시 남구 무거동 855-7",
+                "동물병원", "2025-03-24")));
+
+        collector(100).collect(freshContext(), chunks::add);
+
+        RawDocumentDraft draft = chunks.get(0).get(0);
+        assertThat(draft.sourceId()).isEqualTo("도그앤피플동물병원|울산광역시 남구 무거동 855-7");
+        // 이 표는 우리가 잘라내지 않았다는 것을 보여주는 자리임
+        assertThat(draft.displayTitle()).isEqualTo("도그 앤 피플 동물병원");
+        assertThat(draft.payload().get("list")).isEqualTo(
+                row("도그 앤 피플 동물병원", "울산광역시 남구 무거동 855-7", "동물병원", "2025-03-24"));
+    }
+
+    @Test
+    @DisplayName("지번주소의 공백은 걷어내지 않는다")
+    void keepsSpacesInAddress() {
+        given(List.of(row("행복동물병원", "서울특별시 강남구 역삼동 1-1", "동물병원", "2025-03-24")));
+
+        collector(100).collect(freshContext(), chunks::add);
+
+        // 주소 띄어쓰기가 달라 갈린 쌍이 실측에서 한 건도 없었음
+        // 번지를 붙이면 서로 다른 주소가 겹칠 여지만 생김
+        assertThat(chunks.get(0).get(0).sourceId())
+                .isEqualTo("행복동물병원|서울특별시 강남구 역삼동 1-1");
+    }
+
+    @Test
+    @DisplayName("띄어쓰기만 다른 두 판 가운데 작성일이 늦은 것이 남는다")
+    void keepsLatestAmongSpacingVariants() {
+        Map<String, String> old = row("상아 동물메디컬", "경상남도 창원시 의창구 도계동 404-2",
+                "동물병원", "2022-11-30");
+        Map<String, String> recent = row("상아동물메디컬", "경상남도 창원시 의창구 도계동 404-2",
+                "동물병원", "2025-03-24");
+        given(List.of(recent, old));
+
+        collector(100).collect(freshContext(), chunks::add);
+
+        assertThat(chunks.get(0)).hasSize(1);
+        // 최신만 남기는 판정이 그대로 걸림. 표시 이름은 살아남은 행의 원본 표기가 됨
+        assertThat(chunks.get(0).get(0).sourceModified())
+                .isEqualTo(LocalDateTime.of(2025, 3, 24, 0, 0));
+        assertThat(chunks.get(0).get(0).displayTitle()).isEqualTo("상아동물메디컬");
+    }
+
+    @Test
     @DisplayName("원본을 list 열쇠 아래에 그대로 담는다")
     void keepsRawRowUnderListKey() {
         Map<String, String> row = row("한강공원", "서울특별시 영등포구 여의도동 4-4", "여행지", "2025-03-24");
@@ -200,10 +265,13 @@ class CultureCsvCollectorTest {
      *
      * 실물 리더가 목록을 만들지 않고 행마다 콜백을 부르므로 시늉도 같아야 합니다.
      * 그래야 수집기가 읽는 도중에 거르는 것을 그대로 확인합니다.
+     *
+     * 리더가 인코딩과 컬럼 수와 필수 컬럼을 함께 받게 되어 콜백이 다섯 번째 인자입니다.
+     * 소스가 둘이 되면서 읽는 쪽을 하나로 합쳤고 그 넷만 값으로 갈립니다.
      */
     private void given(List<Map<String, String>> rows) {
-        when(reader.read(any(), any())).thenAnswer(invocation -> {
-            Consumer<Map<String, String>> rowSink = invocation.getArgument(1);
+        when(reader.read(any(), any(), anyInt(), any(), any())).thenAnswer(invocation -> {
+            Consumer<Map<String, String>> rowSink = invocation.getArgument(4);
             rows.forEach(rowSink);
             return rows.size();
         });
@@ -214,7 +282,8 @@ class CultureCsvCollectorTest {
                 chunkSize, 0, 0, 1000, 5,
                 new IngestProperties.PetTour("http://localhost", "test-only", 100, 0),
                 new IngestProperties.GoCamping("http://localhost", "test-only", 100),
-                new IngestProperties.Culture("build/tmp/test-culture.csv"));
+                new IngestProperties.Culture("build/tmp/test-culture.csv"),
+                new IngestProperties.MoisVet("build/tmp/test-mois-vet.csv", "CP949"));
         return new CultureCsvCollector(reader, assembler, properties);
     }
 

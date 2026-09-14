@@ -7,6 +7,7 @@ import com.pawtrail.ingest.application.dto.output.PendingDocumentsOutput;
 import com.pawtrail.ingest.application.dto.output.PlaceDocumentsOutput;
 import com.pawtrail.ingest.application.dto.output.StatusUpdateOutput;
 import com.pawtrail.ingest.application.service.IngestExecutor;
+import com.pawtrail.ingest.application.service.MoisVetDirectExecutor;
 import com.pawtrail.ingest.application.service.PlaceLinkExecutor;
 import com.pawtrail.ingest.application.service.IngestQueryService;
 import com.pawtrail.ingest.application.service.IngestTriggerService;
@@ -58,6 +59,7 @@ public class InternalIngestController {
     private final IngestTriggerService ingestTriggerService;
     private final IngestExecutor ingestExecutor;
     private final PlaceLinkExecutor placeLinkExecutor;
+    private final MoisVetDirectExecutor moisVetDirectExecutor;
     private final IngestQueryService ingestQueryService;
     private final RawDocumentStatusService rawDocumentStatusService;
 
@@ -83,7 +85,9 @@ public class InternalIngestController {
         //
         // 앞의 둘은 바깥에서 받아 우리 표에 쌓고 마지막 하나는 쌓인 것을 다른 서비스에 보냄
         // 하는 일이 달라 실행기를 나눴고, 트리거와 실행 기록은 같은 것을 씀
-        if (request.runType() == RunType.LINK) {
+        if (request.runType() == RunType.DIRECT) {
+            moisVetDirectExecutor.execute(runId);
+        } else if (request.runType() == RunType.LINK) {
             placeLinkExecutor.execute(runId);
         } else {
             ingestExecutor.execute(runId);

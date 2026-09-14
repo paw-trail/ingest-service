@@ -37,6 +37,7 @@ import org.springframework.validation.annotation.Validated;
  * @param petTour        한국관광공사 반려동물 동반여행 서비스 접속 정보입니다.
  * @param goCamping      한국관광공사 고캠핑 정보 조회서비스 접속 정보입니다.
  * @param culture        한국문화정보원 문화시설 CSV 정보입니다. 바깥을 부르지 않고 파일을 읽습니다.
+ * @param moisVet        행정안전부 동물병원 인허가 CSV 정보입니다. 이 소스도 파일을 읽습니다.
  */
 @Validated
 @ConfigurationProperties(prefix = "app.ingest")
@@ -75,7 +76,11 @@ public record IngestProperties(
 
         @NotNull(message = "app.ingest.culture 설정이 필요합니다")
         @Valid
-        Culture culture) {
+        Culture culture,
+
+        @NotNull(message = "app.ingest.mois-vet 설정이 필요합니다")
+        @Valid
+        MoisVet moisVet) {
 
     /**
      * @param baseUrl      서비스 경로입니다. 오퍼레이션 이름은 부르는 쪽이 붙입니다.
@@ -143,5 +148,23 @@ public record IngestProperties(
     public record Culture(
             @NotBlank(message = "app.ingest.culture.file-path 가 필요합니다")
             String filePath) {
+    }
+
+    /**
+     * @param filePath 행정안전부 동물병원 인허가 CSV 의 자리입니다.
+     *                 문화정보원과 같은 형태이며 파일 이름에 날짜가 들어 있습니다.
+     *
+     * @param charset  파일 인코딩입니다.
+     *                 이 소스만 CP949 로 옵니다. 문화정보원은 UTF-8 입니다.
+     *                 값으로 둔 이유는 소스가 정하는 것이라 코드에 박으면
+     *                 다음 판이 바뀌었을 때 코드를 고치게 되기 때문입니다.
+     *                 어긋나면 한글이 깨져 사업장명을 찾지 못합니다.
+     */
+    public record MoisVet(
+            @NotBlank(message = "app.ingest.mois-vet.file-path 가 필요합니다")
+            String filePath,
+
+            @NotBlank(message = "app.ingest.mois-vet.charset 이 필요합니다")
+            String charset) {
     }
 }

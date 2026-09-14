@@ -112,6 +112,24 @@ dependencies {
     // Boot BOM 이 관리하지 않아 버전을 gradle.properties 에 둠
     implementation "org.apache.commons:commons-csv:${commonsCsvVersion}"
 
+    // ── 좌표계 변환 ───────────────────────────────────────────
+    // 행정안전부 동물병원 CSV 가 EPSG:5174 로 옴
+    // 보정계수가 들어가지 않은 Bessel 중부원점 TM 이고 단위가 미터라
+    // 위경도 자리에 그대로 넣으면 값이 통째로 어긋남
+    //
+    // * 직접 짜지 않는 이유
+    //   Bessel 타원체 횡메르카토르 역투영을 손으로 짜는 일임
+    //   틀려도 예외가 나지 않고 값이 몇십 미터 어긋나는 것으로 끝나
+    //   병합 결과로만 드러남
+    //
+    // * proj4j-epsg 를 함께 넣지 않는 이유
+    //   코어에는 EPSG 번호로 찾는 기능이 없고 그 데이터셋이 별도 아티팩트임
+    //   우리가 쓰는 좌표계가 하나뿐이라 정의를 문자열로 적고 데이터셋은 싣지 않음
+    //   그 문자열이 맞는지는 pyproj 로 낸 값과 대조해 확인함
+    //
+    // Boot BOM 이 관리하지 않아 버전을 gradle.properties 에 둠
+    implementation "org.locationtech.proj4j:proj4j:${proj4jVersion}"
+
     // ── Lombok ────────────────────────────────────────────────
     compileOnly         'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'

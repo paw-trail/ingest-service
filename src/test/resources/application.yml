@@ -106,3 +106,7 @@ app:
     culture:
       # 이 시험은 파일을 실제로 읽지 않음, 값이 비면 바인딩이 실패하므로 자리만 채움
       file-path: build/tmp/test-culture.csv
+    mois-vet:
+      # 위와 같음, 자리만 채움
+      file-path: build/tmp/test-mois-vet.csv
+      charset: CP949

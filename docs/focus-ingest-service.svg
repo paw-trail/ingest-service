@@ -1,11 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1860" height="900" viewBox="0 0 1860 900" font-family="Noto Sans CJK KR, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif">
-<defs><marker id="ah-374151" markerWidth="11" markerHeight="9" refX="10" refY="4.5" orient="auto"><path d="M0,0 L11,4.5 L0,9 z" fill="#374151"/></marker><marker id="as-374151" markerWidth="11" markerHeight="9" refX="1" refY="4.5" orient="auto"><path d="M11,0 L0,4.5 L11,9 z" fill="#374151"/></marker><marker id="ah-3B82F6" markerWidth="11" markerHeight="9" refX="10" refY="4.5" orient="auto"><path d="M0,0 L11,4.5 L0,9 z" fill="#3B82F6"/></marker><marker id="as-3B82F6" markerWidth="11" markerHeight="9" refX="1" refY="4.5" orient="auto"><path d="M11,0 L0,4.5 L11,9 z" fill="#3B82F6"/></marker><marker id="ah-6366F1" markerWidth="11" markerHeight="9" refX="10" refY="4.5" orient="auto"><path d="M0,0 L11,4.5 L0,9 z" fill="#6366F1"/></marker><marker id="as-6366F1" markerWidth="11" markerHeight="9" refX="1" refY="4.5" orient="auto"><path d="M11,0 L0,4.5 L11,9 z" fill="#6366F1"/></marker><marker id="ah-16A34A" markerWidth="11" markerHeight="9" refX="10" refY="4.5" orient="auto"><path d="M0,0 L11,4.5 L0,9 z" fill="#16A34A"/></marker><marker id="as-16A34A" markerWidth="11" markerHeight="9" refX="1" refY="4.5" orient="auto"><path d="M11,0 L0,4.5 L11,9 z" fill="#16A34A"/></marker><marker id="ah-F97316" markerWidth="11" markerHeight="9" refX="10" refY="4.5" orient="auto"><path d="M0,0 L11,4.5 L0,9 z" fill="#F97316"/></marker><marker id="as-F97316" markerWidth="11" markerHeight="9" refX="1" refY="4.5" orient="auto"><path d="M11,0 L0,4.5 L11,9 z" fill="#F97316"/></marker><marker id="ah-A855F7" markerWidth="11" markerHeight="9" refX="10" refY="4.5" orient="auto"><path d="M0,0 L11,4.5 L0,9 z" fill="#A855F7"/></marker><marker id="as-A855F7" markerWidth="11" markerHeight="9" refX="1" refY="4.5" orient="auto"><path d="M11,0 L0,4.5 L11,9 z" fill="#A855F7"/></marker><marker id="ah-9CA3AF" markerWidth="11" markerHeight="9" refX="10" refY="4.5" orient="auto"><path d="M0,0 L11,4.5 L0,9 z" fill="#9CA3AF"/></marker><marker id="as-9CA3AF" markerWidth="11" markerHeight="9" refX="1" refY="4.5" orient="auto"><path d="M11,0 L0,4.5 L11,9 z" fill="#9CA3AF"/></marker><marker id="ah-D97706" markerWidth="11" markerHeight="9" refX="10" refY="4.5" orient="auto"><path d="M0,0 L11,4.5 L0,9 z" fill="#D97706"/></marker><marker id="as-D97706" markerWidth="11" markerHeight="9" refX="1" refY="4.5" orient="auto"><path d="M11,0 L0,4.5 L11,9 z" fill="#D97706"/></marker><marker id="ah-111827" markerWidth="11" markerHeight="9" refX="10" refY="4.5" orient="auto"><path d="M0,0 L11,4.5 L0,9 z" fill="#111827"/></marker><marker id="as-111827" markerWidth="11" markerHeight="9" refX="1" refY="4.5" orient="auto"><path d="M11,0 L0,4.5 L11,9 z" fill="#111827"/></marker></defs><rect width="1860" height="900" fill="#FFFFFF"/>
-<rect x="612.0" y="387.0" width="376" height="126" rx="18" fill="none" stroke="#22C55E" stroke-width="3" opacity="0.5"/>
-<rect x="620.0" y="395.0" width="360" height="110" rx="12" fill="#DCFCE7" stroke="#22C55E" stroke-width="3.5"/>
-<text x="800" y="428" font-size="22" font-weight="bold" text-anchor="middle" fill="#111827">ingest-service  :8088</text>
-<text x="800" y="448" font-size="12" font-weight="normal" text-anchor="middle" fill="#4B5563">공공데이터를 받아 담고 place 로 넘김</text>
-<text x="800" y="464" font-size="12" font-weight="normal" text-anchor="middle" fill="#4B5563">API 5개 · 화면 없음 · 상시 미기동</text>
-<text x="612.0" y="381.0" font-size="13" font-weight="bold" text-anchor="start" fill="#22C55E">이 레포</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1980" height="1010" viewBox="0 0 1980 1010" font-family="Noto Sans CJK KR, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif">
+<defs><marker id="ah-374151" markerWidth="11" markerHeight="9" refX="10" refY="4.5" orient="auto"><path d="M0,0 L11,4.5 L0,9 z" fill="#374151"/></marker><marker id="as-374151" markerWidth="11" markerHeight="9" refX="1" refY="4.5" orient="auto"><path d="M11,0 L0,4.5 L11,9 z" fill="#374151"/></marker><marker id="ah-3B82F6" markerWidth="11" markerHeight="9" refX="10" refY="4.5" orient="auto"><path d="M0,0 L11,4.5 L0,9 z" fill="#3B82F6"/></marker><marker id="as-3B82F6" markerWidth="11" markerHeight="9" refX="1" refY="4.5" orient="auto"><path d="M11,0 L0,4.5 L11,9 z" fill="#3B82F6"/></marker><marker id="ah-6366F1" markerWidth="11" markerHeight="9" refX="10" refY="4.5" orient="auto"><path d="M0,0 L11,4.5 L0,9 z" fill="#6366F1"/></marker><marker id="as-6366F1" markerWidth="11" markerHeight="9" refX="1" refY="4.5" orient="auto"><path d="M11,0 L0,4.5 L11,9 z" fill="#6366F1"/></marker><marker id="ah-16A34A" markerWidth="11" markerHeight="9" refX="10" refY="4.5" orient="auto"><path d="M0,0 L11,4.5 L0,9 z" fill="#16A34A"/></marker><marker id="as-16A34A" markerWidth="11" markerHeight="9" refX="1" refY="4.5" orient="auto"><path d="M11,0 L0,4.5 L11,9 z" fill="#16A34A"/></marker><marker id="ah-F97316" markerWidth="11" markerHeight="9" refX="10" refY="4.5" orient="auto"><path d="M0,0 L11,4.5 L0,9 z" fill="#F97316"/></marker><marker id="as-F97316" markerWidth="11" markerHeight="9" refX="1" refY="4.5" orient="auto"><path d="M11,0 L0,4.5 L11,9 z" fill="#F97316"/></marker><marker id="ah-A855F7" markerWidth="11" markerHeight="9" refX="10" refY="4.5" orient="auto"><path d="M0,0 L11,4.5 L0,9 z" fill="#A855F7"/></marker><marker id="as-A855F7" markerWidth="11" markerHeight="9" refX="1" refY="4.5" orient="auto"><path d="M11,0 L0,4.5 L11,9 z" fill="#A855F7"/></marker><marker id="ah-9CA3AF" markerWidth="11" markerHeight="9" refX="10" refY="4.5" orient="auto"><path d="M0,0 L11,4.5 L0,9 z" fill="#9CA3AF"/></marker><marker id="as-9CA3AF" markerWidth="11" markerHeight="9" refX="1" refY="4.5" orient="auto"><path d="M11,0 L0,4.5 L11,9 z" fill="#9CA3AF"/></marker><marker id="ah-D97706" markerWidth="11" markerHeight="9" refX="10" refY="4.5" orient="auto"><path d="M0,0 L11,4.5 L0,9 z" fill="#D97706"/></marker><marker id="as-D97706" markerWidth="11" markerHeight="9" refX="1" refY="4.5" orient="auto"><path d="M11,0 L0,4.5 L11,9 z" fill="#D97706"/></marker><marker id="ah-111827" markerWidth="11" markerHeight="9" refX="10" refY="4.5" orient="auto"><path d="M0,0 L11,4.5 L0,9 z" fill="#111827"/></marker><marker id="as-111827" markerWidth="11" markerHeight="9" refX="1" refY="4.5" orient="auto"><path d="M11,0 L0,4.5 L11,9 z" fill="#111827"/></marker></defs><rect width="1980" height="1010" fill="#FFFFFF"/>
+<rect x="642.0" y="407.0" width="396" height="126" rx="18" fill="none" stroke="#22C55E" stroke-width="3" opacity="0.5"/>
+<rect x="650.0" y="415.0" width="380" height="110" rx="12" fill="#DCFCE7" stroke="#22C55E" stroke-width="3.5"/>
+<text x="840" y="448" font-size="22" font-weight="bold" text-anchor="middle" fill="#111827">ingest-service  :8088</text>
+<text x="840" y="468" font-size="12" font-weight="normal" text-anchor="middle" fill="#4B5563">공공데이터를 받아 담고 place 로 넘김</text>
+<text x="840" y="484" font-size="12" font-weight="normal" text-anchor="middle" fill="#4B5563">API 5개 · 화면 없음 · 상시 미기동</text>
+<text x="642.0" y="401.0" font-size="13" font-weight="bold" text-anchor="start" fill="#22C55E">이 레포</text>
 <rect x="50.0" y="95.0" width="260" height="90" rx="12" fill="#FFFFFF" stroke="#9CA3AF" stroke-width="2.2" stroke-dasharray="9,7"/>
 <text x="180" y="118" font-size="17" font-weight="bold" text-anchor="middle" fill="#111827">Jenkins 잡</text>
 <text x="180" y="138" font-size="12" font-weight="normal" text-anchor="middle" fill="#4B5563">수집을 언제 부를지 정함</text>
@@ -14,61 +14,66 @@
 <text x="180" y="338" font-size="17" font-weight="bold" text-anchor="middle" fill="#111827">공공데이터포털</text>
 <text x="180" y="358" font-size="12" font-weight="normal" text-anchor="middle" fill="#4B5563">반려동물 동반여행 · 고캠핑</text>
 <text x="180" y="374" font-size="12" font-weight="normal" text-anchor="middle" fill="#4B5563">오퍼레이션마다 하루 1,000회</text>
-<rect x="50.0" y="535.0" width="260" height="90" rx="12" fill="#F3F4F6" stroke="#9CA3AF" stroke-width="2.2"/>
-<text x="180" y="558" font-size="17" font-weight="bold" text-anchor="middle" fill="#111827">문화정보원 CSV</text>
-<text x="180" y="578" font-size="12" font-weight="normal" text-anchor="middle" fill="#4B5563">이미지 안에 담겨 있음</text>
-<text x="180" y="594" font-size="12" font-weight="normal" text-anchor="middle" fill="#4B5563">바깥을 부르지 않음</text>
-<rect x="50.0" y="755.0" width="260" height="70" rx="12" fill="#DBEAFE" stroke="#3B82F6" stroke-width="2.2" stroke-dasharray="9,7"/>
-<text x="180" y="776" font-size="17" font-weight="bold" text-anchor="middle" fill="#111827">gateway-server</text>
-<text x="180" y="796" font-size="12" font-weight="normal" text-anchor="middle" fill="#4B5563">여기로는 라우팅하지 않음</text>
-<rect x="640.0" y="80.0" width="320" height="80" rx="12" fill="#E0E7FF" stroke="#6366F1" stroke-width="2.2"/>
-<text x="800" y="106" font-size="17" font-weight="bold" text-anchor="middle" fill="#111827">config-server</text>
-<text x="800" y="126" font-size="12" font-weight="normal" text-anchor="middle" fill="#4B5563">포트 · DB · 인증키 · 소스별 값</text>
-<rect x="1370.0" y="70.0" width="300" height="80" rx="12" fill="#E0E7FF" stroke="#6366F1" stroke-width="2.2"/>
-<text x="1520" y="96" font-size="17" font-weight="bold" text-anchor="middle" fill="#111827">eureka-server</text>
-<text x="1520" y="116" font-size="12" font-weight="normal" text-anchor="middle" fill="#4B5563">등록</text>
-<rect x="1370.0" y="250.0" width="300" height="100" rx="12" fill="#FFEDD5" stroke="#F97316" stroke-width="2.2"/>
-<text x="1520" y="278" font-size="17" font-weight="bold" text-anchor="middle" fill="#111827">PostgreSQL  raw_db</text>
-<text x="1520" y="298" font-size="12" font-weight="normal" text-anchor="middle" fill="#4B5563">raw_document 17,480건 · place_id 17,472</text>
-<text x="1520" y="314" font-size="12" font-weight="normal" text-anchor="middle" fill="#4B5563">ingest_run  (표 2개)</text>
-<rect x="1370.0" y="510.0" width="300" height="100" rx="12" fill="#F0FDF4" stroke="#86EFAC" stroke-width="2.2"/>
-<text x="1520" y="538" font-size="17" font-weight="bold" text-anchor="middle" fill="#111827">extract-service</text>
-<text x="1520" y="558" font-size="12" font-weight="normal" text-anchor="middle" fill="#4B5563">대기 문서를 가져가 해석</text>
-<text x="1520" y="574" font-size="12" font-weight="normal" text-anchor="middle" fill="#4B5563">아직 없음</text>
-<rect x="1370.0" y="730.0" width="300" height="100" rx="12" fill="#F0FDF4" stroke="#86EFAC" stroke-width="2.2"/>
-<text x="1520" y="758" font-size="17" font-weight="bold" text-anchor="middle" fill="#111827">place-service</text>
-<text x="1520" y="778" font-size="12" font-weight="normal" text-anchor="middle" fill="#4B5563">소스가 겹친 것을 한 장소로</text>
-<text x="1520" y="794" font-size="12" font-weight="normal" text-anchor="middle" fill="#4B5563">넘긴 결과를 돌려줌</text>
-<polyline points="310.0,140 500,140 500,420 620,420" fill="none" stroke="#9CA3AF" stroke-width="2.4" marker-end="url(#ah-9CA3AF)" stroke-dasharray="7,6"/>
-<rect x="326" y="120" width="187" height="19" rx="4" fill="#FFFFFF" opacity="0.92"/>
-<text x="330" y="132" font-size="13" font-weight="normal" text-anchor="start" fill="#9CA3AF">POST /internal/ingest/trigger</text>
-<polyline points="620,450 500,450 500,360 310.0,360" fill="none" stroke="#F97316" stroke-width="2.4" marker-end="url(#ah-F97316)" stroke-dasharray="7,6"/>
-<rect x="326" y="333" width="110" height="19" rx="4" fill="#FFFFFF" opacity="0.92"/>
-<text x="330" y="345" font-size="13" font-weight="normal" text-anchor="start" fill="#F97316">목록 · 상세를 부름</text>
-<polyline points="310.0,580 500,580 500,480 620,480" fill="none" stroke="#F97316" stroke-width="2.4" marker-end="url(#ah-F97316)"/>
-<rect x="506" y="533" width="73" height="19" rx="4" fill="#FFFFFF" opacity="0.92"/>
-<text x="510" y="545" font-size="13" font-weight="normal" text-anchor="start" fill="#F97316">파일을 읽음</text>
-<polyline points="310.0,790 560,790 560,540 700,505" fill="none" stroke="#9CA3AF" stroke-width="2.4" marker-end="url(#ah-9CA3AF)" stroke-dasharray="7,6"/>
-<rect x="566" y="688" width="97" height="19" rx="4" fill="#FFFFFF" opacity="0.92"/>
-<text x="570" y="700" font-size="13" font-weight="normal" text-anchor="start" fill="#9CA3AF">라우팅하지 않음</text>
-<polyline points="800,160.0 800,395.0" fill="none" stroke="#6366F1" stroke-width="2.4" marker-end="url(#ah-6366F1)"/>
-<rect x="762" y="258" width="76" height="19" rx="4" fill="#FFFFFF" opacity="0.92"/>
-<text x="800.0" y="269.5" font-size="13" font-weight="normal" text-anchor="middle" fill="#6366F1">기동 시 설정</text>
-<polyline points="980.0,450 1220,450 1220,110 1370.0,110" fill="none" stroke="#6366F1" stroke-width="2.4" marker-end="url(#ah-6366F1)"/>
-<rect x="1226" y="238" width="34" height="19" rx="4" fill="#FFFFFF" opacity="0.92"/>
-<text x="1230" y="250" font-size="13" font-weight="normal" text-anchor="start" fill="#6366F1">등록</text>
-<polyline points="980.0,450 1220,450 1220,300 1370.0,300" fill="none" stroke="#F97316" stroke-width="2.4" marker-end="url(#ah-F97316)"/>
-<rect x="1226" y="358" width="147" height="19" rx="4" fill="#FFFFFF" opacity="0.92"/>
-<text x="1230" y="370" font-size="13" font-weight="normal" text-anchor="start" fill="#F97316">JPA · Flyway V20 · V21</text>
-<polyline points="1370,560 1100,560 1100,470 980,470" fill="none" stroke="#16A34A" stroke-width="2.4" marker-end="url(#ah-16A34A)"/>
-<rect x="1125" y="540" width="239" height="19" rx="4" fill="#FFFFFF" opacity="0.92"/>
-<text x="1360" y="552" font-size="13" font-weight="normal" text-anchor="end" fill="#16A34A">GET /internal/raw · PATCH 로 결과 반영</text>
-<polyline points="980,495 1300,495 1300,760 1370,760" fill="none" stroke="#16A34A" stroke-width="2.4" marker-end="url(#ah-16A34A)"/>
-<rect x="1306" y="628" width="316" height="19" rx="4" fill="#FFFFFF" opacity="0.92"/>
-<text x="1310" y="640" font-size="13" font-weight="normal" text-anchor="start" fill="#16A34A">POST /internal/places/bulk  →  place_id 를 돌려받음</text>
-<polyline points="1370,810 1180,810 1180,505 980,505" fill="none" stroke="#16A34A" stroke-width="2.4" marker-end="url(#ah-16A34A)"/>
-<rect x="996" y="788" width="249" height="19" rx="4" fill="#FFFFFF" opacity="0.92"/>
-<text x="1000" y="800" font-size="13" font-weight="normal" text-anchor="start" fill="#16A34A">GET /internal/raw/{placeId}/documents</text>
-<text x="40" y="858" font-size="13" font-weight="normal" text-anchor="start" fill="#4B5563">게이트웨이가 /internal 을 라우팅하지 않음 — 화면이 없고 부르는 것이 Jenkins 잡과 extract 와 place 뿐임 · Kafka 를 쓰지 않아 이벤트를 발행하지도 받지도 않음</text>
-<text x="40" y="880" font-size="13" font-weight="normal" text-anchor="start" fill="#4B5563">관광공사 상세는 한 번에 3,237회라 하루 한도를 넘김 — 그날 받은 데까지 기록하고 다음 날 그 자리부터 이어받음 · 원문은 고치지 않고 담고 해석은 extract 가 함</text>
-<text x="1836" y="888" font-size="11" text-anchor="end" fill="#9CA3AF">ingest-service 를 중심으로 · 직접 연결된 것만</text></svg>
+<rect x="50.0" y="540.0" width="260" height="100" rx="12" fill="#F3F4F6" stroke="#9CA3AF" stroke-width="2.2"/>
+<text x="180" y="568" font-size="17" font-weight="bold" text-anchor="middle" fill="#111827">CSV 파일 둘</text>
+<text x="180" y="588" font-size="12" font-weight="normal" text-anchor="middle" fill="#4B5563">문화정보원 · 행정안전부</text>
+<text x="180" y="604" font-size="12" font-weight="normal" text-anchor="middle" fill="#4B5563">이미지 안에 담겨 있음</text>
+<rect x="50.0" y="795.0" width="260" height="70" rx="12" fill="#DBEAFE" stroke="#3B82F6" stroke-width="2.2" stroke-dasharray="9,7"/>
+<text x="180" y="816" font-size="17" font-weight="bold" text-anchor="middle" fill="#111827">gateway-server</text>
+<text x="180" y="836" font-size="12" font-weight="normal" text-anchor="middle" fill="#4B5563">여기로는 라우팅하지 않음</text>
+<rect x="680.0" y="80.0" width="320" height="80" rx="12" fill="#E0E7FF" stroke="#6366F1" stroke-width="2.2"/>
+<text x="840" y="106" font-size="17" font-weight="bold" text-anchor="middle" fill="#111827">config-server</text>
+<text x="840" y="126" font-size="12" font-weight="normal" text-anchor="middle" fill="#4B5563">포트 · DB · 인증키 · 소스별 값</text>
+<rect x="1490.0" y="70.0" width="300" height="80" rx="12" fill="#E0E7FF" stroke="#6366F1" stroke-width="2.2"/>
+<text x="1640" y="96" font-size="17" font-weight="bold" text-anchor="middle" fill="#111827">eureka-server</text>
+<text x="1640" y="116" font-size="12" font-weight="normal" text-anchor="middle" fill="#4B5563">등록</text>
+<rect x="1490.0" y="255.0" width="300" height="110" rx="12" fill="#FFEDD5" stroke="#F97316" stroke-width="2.2"/>
+<text x="1640" y="280" font-size="17" font-weight="bold" text-anchor="middle" fill="#111827">PostgreSQL  raw_db</text>
+<text x="1640" y="300" font-size="12" font-weight="normal" text-anchor="middle" fill="#4B5563">raw_document 17,471건 · place_id 17,463</text>
+<text x="1640" y="316" font-size="12" font-weight="normal" text-anchor="middle" fill="#4B5563">ingest_run  (표 2개)</text>
+<text x="1640" y="332" font-size="12" font-weight="normal" text-anchor="middle" fill="#4B5563">소스 넷 가운데 셋만 담김</text>
+<rect x="1490.0" y="520.0" width="300" height="100" rx="12" fill="#F0FDF4" stroke="#86EFAC" stroke-width="2.2"/>
+<text x="1640" y="548" font-size="17" font-weight="bold" text-anchor="middle" fill="#111827">extract-service</text>
+<text x="1640" y="568" font-size="12" font-weight="normal" text-anchor="middle" fill="#4B5563">대기 문서를 가져가 해석</text>
+<text x="1640" y="584" font-size="12" font-weight="normal" text-anchor="middle" fill="#4B5563">아직 없음</text>
+<rect x="1490.0" y="775.0" width="300" height="110" rx="12" fill="#F0FDF4" stroke="#86EFAC" stroke-width="2.2"/>
+<text x="1640" y="800" font-size="17" font-weight="bold" text-anchor="middle" fill="#111827">place-service</text>
+<text x="1640" y="820" font-size="12" font-weight="normal" text-anchor="middle" fill="#4B5563">소스가 겹친 것을 한 장소로</text>
+<text x="1640" y="836" font-size="12" font-weight="normal" text-anchor="middle" fill="#4B5563">넘긴 결과를 돌려줌</text>
+<text x="1640" y="852" font-size="12" font-weight="normal" text-anchor="middle" fill="#4B5563">동물병원은 바로 받음</text>
+<polyline points="310.0,140 520,140 520,440 650,440" fill="none" stroke="#9CA3AF" stroke-width="2.4" marker-end="url(#ah-9CA3AF)" stroke-dasharray="7,6"/>
+<rect x="336" y="120" width="187" height="19" rx="4" fill="#FFFFFF" opacity="0.92"/>
+<text x="340" y="132" font-size="13" font-weight="normal" text-anchor="start" fill="#9CA3AF">POST /internal/ingest/trigger</text>
+<polyline points="650,470 520,470 520,360 310.0,360" fill="none" stroke="#F97316" stroke-width="2.4" marker-end="url(#ah-F97316)" stroke-dasharray="7,6"/>
+<rect x="336" y="333" width="110" height="19" rx="4" fill="#FFFFFF" opacity="0.92"/>
+<text x="340" y="345" font-size="13" font-weight="normal" text-anchor="start" fill="#F97316">목록 · 상세를 부름</text>
+<polyline points="310.0,590 520,590 520,500 650,500" fill="none" stroke="#F97316" stroke-width="2.4" marker-end="url(#ah-F97316)"/>
+<rect x="526" y="548" width="73" height="19" rx="4" fill="#FFFFFF" opacity="0.92"/>
+<text x="530" y="560" font-size="13" font-weight="normal" text-anchor="start" fill="#F97316">파일을 읽음</text>
+<polyline points="310.0,830 600,830 600,560 760,525" fill="none" stroke="#9CA3AF" stroke-width="2.4" marker-end="url(#ah-9CA3AF)" stroke-dasharray="7,6"/>
+<rect x="606" y="718" width="97" height="19" rx="4" fill="#FFFFFF" opacity="0.92"/>
+<text x="610" y="730" font-size="13" font-weight="normal" text-anchor="start" fill="#9CA3AF">라우팅하지 않음</text>
+<polyline points="840,160.0 840,415.0" fill="none" stroke="#6366F1" stroke-width="2.4" marker-end="url(#ah-6366F1)"/>
+<rect x="802" y="268" width="76" height="19" rx="4" fill="#FFFFFF" opacity="0.92"/>
+<text x="840.0" y="279.5" font-size="13" font-weight="normal" text-anchor="middle" fill="#6366F1">기동 시 설정</text>
+<polyline points="1030.0,470 1300,470 1300,110 1490.0,110" fill="none" stroke="#6366F1" stroke-width="2.4" marker-end="url(#ah-6366F1)"/>
+<rect x="1306" y="248" width="34" height="19" rx="4" fill="#FFFFFF" opacity="0.92"/>
+<text x="1310" y="260" font-size="13" font-weight="normal" text-anchor="start" fill="#6366F1">등록</text>
+<polyline points="1030.0,470 1300,470 1300,310 1490.0,310" fill="none" stroke="#F97316" stroke-width="2.4" marker-end="url(#ah-F97316)"/>
+<rect x="1306" y="373" width="147" height="19" rx="4" fill="#FFFFFF" opacity="0.92"/>
+<text x="1310" y="385" font-size="13" font-weight="normal" text-anchor="start" fill="#F97316">JPA · Flyway V20 · V21</text>
+<polyline points="1490,570 1180,570 1180,490 1030,490" fill="none" stroke="#16A34A" stroke-width="2.4" marker-end="url(#ah-16A34A)"/>
+<rect x="1245" y="550" width="239" height="19" rx="4" fill="#FFFFFF" opacity="0.92"/>
+<text x="1480" y="562" font-size="13" font-weight="normal" text-anchor="end" fill="#16A34A">GET /internal/raw · PATCH 로 결과 반영</text>
+<polyline points="1030,512 1390,512 1390,800 1490,800" fill="none" stroke="#16A34A" stroke-width="2.4" marker-end="url(#ah-16A34A)"/>
+<rect x="1396" y="678" width="179" height="19" rx="4" fill="#FFFFFF" opacity="0.92"/>
+<text x="1400" y="690" font-size="13" font-weight="normal" text-anchor="start" fill="#16A34A">LINK  소스 셋을 담아 둔 뒤 넘김</text>
+<polyline points="1490,858 1250,858 1250,532 1030,532" fill="none" stroke="#16A34A" stroke-width="2.4" marker-end="url(#ah-16A34A)"/>
+<rect x="1046" y="838" width="249" height="19" rx="4" fill="#FFFFFF" opacity="0.92"/>
+<text x="1050" y="850" font-size="13" font-weight="normal" text-anchor="start" fill="#16A34A">GET /internal/raw/{placeId}/documents</text>
+<polyline points="900,525 900,940 1560,940 1560,885" fill="none" stroke="#16A34A" stroke-width="2.4" marker-end="url(#ah-16A34A)"/>
+<rect x="906" y="918" width="190" height="19" rx="4" fill="#FFFFFF" opacity="0.92"/>
+<text x="910" y="930" font-size="13" font-weight="normal" text-anchor="start" fill="#16A34A">DIRECT  raw 를 거치지 않고 바로</text>
+<text x="40" y="968" font-size="13" font-weight="normal" text-anchor="start" fill="#4B5563">소스가 넷인데 셋만 raw_db 에 담김 — 행정안전부 동물병원은 조건 문장이 없어 해석할 것도 원문으로 보여줄 것도 없어, 읽는 자리에서 바로 place 로 보냄</text>
+<text x="40" y="990" font-size="13" font-weight="normal" text-anchor="start" fill="#4B5563">관광공사 상세는 한 번에 3,237회라 하루 한도를 넘김 — 그날 받은 데까지 기록하고 다음 날 그 자리부터 이어받음 · 게이트웨이가 /internal 을 라우팅하지 않고 Kafka 도 쓰지 않음</text>
+<text x="1956" y="998" font-size="11" text-anchor="end" fill="#9CA3AF">ingest-service 를 중심으로 · 직접 연결된 것만</text></svg>
