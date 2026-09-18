@@ -44,6 +44,8 @@ dependencies {
     // starter-data-redis 가 전이로 끌어오지만 그러면 페이징이 캐시 의존성에 매달리므로
     // 직접 선언함
     // DB 를 쓰지 않는 서비스도 목록 응답을 반환하므로 이 줄은 남길 것
+    //
+    // * 이 서비스는 그 starter 를 뺐음 — 지금은 JPA 가 끌어오지만 페이징이 그것에 기대지 않게 남김
     implementation 'org.springframework.data:spring-data-commons'
 
     // ── 웹 · 검증 · 보안 · 상태확인 ────────────────────────────
@@ -82,13 +84,28 @@ dependencies {
     annotationProcessor 'jakarta.annotation:jakarta.annotation-api'
 
     // ── 캐시 · 이벤트 ─────────────────────────────────────────
-    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
-    implementation 'org.springframework.boot:spring-boot-starter-kafka'
+    // 템플릿의 두 줄(starter-data-redis · starter-kafka)을 뺐음
+    //
+    // * 캐시 서버를 쓰지 않음
+    //   의존성만 있어도 자동 설정이 켜져 상태 확인이 Redis 연결을 시도하고,
+    //   Redis 가 없는 환경에서 unhealthy 가 됨. 기능은 멀쩡한데 상태만 틀리게 나옴
+    //
+    // * 이벤트를 내지도 받지도 않음
+    //   부르는 쪽은 Jenkins 잡과 사람, 원문을 가져가는 쪽은 extract 가 /internal 로 부름
+    //   Kafka 가 있으면 공통 모듈의 발행 자동 설정이 켜져 쓰지 않는 중계가 원문 DB 를 주기적으로 조회함
+    //
+    // * 함께 지운 곳
+    //   아래 테스트 블록의 짝 둘 · 앱 클래스의 공통 스캔 두 줄 · 테스트 설정의 kafka 블록
+    //   비어 있던 이벤트 · 메시지 폴더
+    //
+    // * 필요해지면 이 줄들과 앱 클래스의 스캔을 함께 되살릴 것
+    //   raw_db 의 outbox · processed_event 표는 공통 마이그레이션이 이미 만들어 두어 그대로 있음
 
     // ── Spring Cloud ──────────────────────────────────────────
+    // 회로 차단기 스타터를 뺐음
+    // 외부 API 재시도는 callWithRetry 로 손으로 짰고 회로 차단기는 쓰지 않음
     implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
     implementation 'org.springframework.cloud:spring-cloud-starter-config'
-    implementation 'org.springframework.cloud:spring-cloud-starter-circuitbreaker-resilience4j'
 
     // ── 관측 ──────────────────────────────────────────────────
     implementation 'org.springframework.boot:spring-boot-starter-zipkin'
@@ -143,8 +160,6 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-validation-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-actuator-test'
-    testImplementation 'org.springframework.boot:spring-boot-starter-data-redis-test'
-    testImplementation 'org.springframework.boot:spring-boot-starter-kafka-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-zipkin-test'
 
     // ── 테스트용 데이터베이스 ─────────────────────────────────
