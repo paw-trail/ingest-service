@@ -67,10 +67,24 @@ class IngestQueryServiceTest {
     }
 
     @Test
+    @DisplayName("원소에 이어진 장소의 식별자를 싣는다")
+    void includesPlaceId() {
+        RawDocument document = document("{}");
+        UUID placeId = UUID.randomUUID();
+        document.linkPlace(placeId);
+        givenDocuments(document);
+
+        PendingDocumentsOutput output = service().findDocuments(DocumentStatus.PENDING, 100);
+
+        // extract 가 뽑은 조건을 장소 단위로 policy 에 보낼 때 이 값을 씀
+        assertThat(output.documents().get(0).placeId()).isEqualTo(placeId);
+    }
+
+    @Test
     @DisplayName("그 상태의 전체 건수를 함께 돌려준다")
     void includesTotalCount() {
         givenDocuments(document("{}"));
-        when(rawDocumentRepository.countByStatus(DocumentStatus.PENDING)).thenReturn(17480L);
+        when(rawDocumentRepository.countLinkedByStatus(DocumentStatus.PENDING)).thenReturn(17480L);
 
         PendingDocumentsOutput output = service().findDocuments(DocumentStatus.PENDING, 100);
 
@@ -88,7 +102,7 @@ class IngestQueryServiceTest {
         // 처리하면 그 문서가 대기 목록에서 빠지므로 쪽 번호로 넘기면
         // 뒤에 있던 것이 앞으로 밀려와 그만큼을 조용히 건너뜀
         ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
-        verify(rawDocumentRepository).findByStatus(eq(DocumentStatus.PENDING), captor.capture());
+        verify(rawDocumentRepository).findLinkedByStatus(eq(DocumentStatus.PENDING), captor.capture());
         assertThat(captor.getValue().getPageNumber()).isZero();
         assertThat(captor.getValue().getPageSize()).isEqualTo(100);
 
@@ -108,7 +122,7 @@ class IngestQueryServiceTest {
         // 원본을 통째로 담아 보내는 응답이라 개수가 곧 크기임
         // 거절하지 않고 맞추는 이유는 우리 서비스끼리 쓰는 경로이기 때문임
         ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
-        verify(rawDocumentRepository).findByStatus(any(), captor.capture());
+        verify(rawDocumentRepository).findLinkedByStatus(any(), captor.capture());
         assertThat(captor.getValue().getPageSize()).isEqualTo(500);
     }
 
@@ -237,7 +251,7 @@ class IngestQueryServiceTest {
     }
 
     private void givenDocuments(RawDocument... documents) {
-        when(rawDocumentRepository.findByStatus(any(), any()))
+        when(rawDocumentRepository.findLinkedByStatus(any(), any()))
                 .thenReturn(new PageImpl<>(List.of(documents)));
     }
 

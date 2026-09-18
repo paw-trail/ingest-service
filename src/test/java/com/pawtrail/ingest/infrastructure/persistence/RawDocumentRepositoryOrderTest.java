@@ -36,6 +36,8 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  *  그러면 처리하지 못한 오래된 문서가 뒤로 밀려 영영 나오지 않을 수 있습니다.
  *  대기 목록을 쪽 번호 없이 언제나 첫 쪽만 주기로 한 판단이 이 정렬에 기대고 있습니다.
  *
+ * 목록은 장소에 이어진 문서만 줍니다. 그 거름이 실제 조회에 걸리는지도 여기서 봅니다.
+ *
  * 데이터베이스를 컨테이너로 직접 띄우는 이유는 컨텍스트 검사와 같습니다.
  * 설정 서버가 떠 있는지에 따라 결과가 갈리면 검사로서 의미가 없습니다.
  */
@@ -67,7 +69,7 @@ class RawDocumentRepositoryOrderTest {
         rawDocumentJpaRepository.flush();
 
         List<RawDocument> found = rawDocumentRepository
-                .findByStatus(DocumentStatus.PENDING, PageRequest.ofSize(10))
+                .findLinkedByStatus(DocumentStatus.PENDING, PageRequest.ofSize(10))
                 .getContent();
 
         // 식별자가 시간 순서를 담은 uuid v7 이라 먼저 저장한 것이 앞에 와야 합니다
@@ -88,13 +90,14 @@ class RawDocumentRepositoryOrderTest {
         rawDocumentJpaRepository.flush();
 
         List<RawDocument> first = rawDocumentRepository
-                .findByStatus(DocumentStatus.PENDING, PageRequest.ofSize(2))
+                .findLinkedByStatus(DocumentStatus.PENDING, PageRequest.ofSize(2))
                 .getContent();
-        first.forEach(RawDocument::markDone);
-        rawDocumentJpaRepository.flush();
+        first.forEach(document -> rawDocumentRepository.markStatusIfUnchanged(
+                document.getId(), document.getContentHash(), DocumentStatus.DONE,
+                LocalDateTime.now(), "extract-test"));
 
         List<RawDocument> next = rawDocumentRepository
-                .findByStatus(DocumentStatus.PENDING, PageRequest.ofSize(2))
+                .findLinkedByStatus(DocumentStatus.PENDING, PageRequest.ofSize(2))
                 .getContent();
 
         // 처리한 것이 대기 목록에서 빠지고 그다음이 맨 앞으로 옵니다
@@ -102,12 +105,37 @@ class RawDocumentRepositoryOrderTest {
         assertThat(next).extracting(RawDocument::getId)
                 .doesNotContainAnyElementsOf(first.stream().map(RawDocument::getId).toList())
                 .hasSize(2);
-        assertThat(rawDocumentRepository.countByStatus(DocumentStatus.PENDING)).isEqualTo(2);
+        assertThat(rawDocumentRepository.countLinkedByStatus(DocumentStatus.PENDING)).isEqualTo(2);
         assertThat(saved).hasSize(4);
     }
 
+    @Test
+    @DisplayName("장소에 이어지지 않은 문서는 목록과 건수에서 빠진다")
+    void skipsDocumentsWithoutPlace() {
+        rawDocumentJpaRepository.deleteAll();
+
+        RawDocument linked = save("A");
+        RawDocument unlinked = rawDocumentJpaRepository.save(RawDocument.create(
+                SourceType.GOCAMPING, "B", "{}", "제목 B", "본문", "hash-B", null, LocalDateTime.now()));
+        rawDocumentJpaRepository.flush();
+
+        List<RawDocument> found = rawDocumentRepository
+                .findLinkedByStatus(DocumentStatus.PENDING, PageRequest.ofSize(10))
+                .getContent();
+
+        // extract 는 조건을 장소 단위로 보내므로 장소가 없는 문서는 보낼 곳이 없음
+        // 좌표 · 주소가 없어 장소 서비스가 건너뛴 문서가 실제로 있음
+        assertThat(found).extracting(RawDocument::getId)
+                .containsExactly(linked.getId())
+                .doesNotContain(unlinked.getId());
+        assertThat(rawDocumentRepository.countLinkedByStatus(DocumentStatus.PENDING)).isEqualTo(1);
+    }
+
+    /**
+     * 장소에 이어진 문서를 저장합니다. 목록이 장소에 이어진 것만 주기 때문입니다.
+     */
     private RawDocument save(String sourceId) {
-        return rawDocumentJpaRepository.save(RawDocument.create(
+        RawDocument document = RawDocument.create(
                 SourceType.PET_TOUR,
                 sourceId,
                 "{}",
@@ -115,6 +143,8 @@ class RawDocumentRepositoryOrderTest {
                 "본문",
                 "hash-" + sourceId,
                 null,
-                LocalDateTime.now()));
+                LocalDateTime.now());
+        document.linkPlace(UUID.randomUUID());
+        return rawDocumentJpaRepository.save(document);
     }
 }

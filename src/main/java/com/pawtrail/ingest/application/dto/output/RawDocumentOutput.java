@@ -16,14 +16,18 @@ import java.util.UUID;
  * @param id             문서 식별자. 처리 결과를 되돌려 쓸 때 이 값을 그대로 보냅니다
  * @param source         어느 소스에서 왔는지
  * @param sourceId       소스가 부여한 식별자. 사람이 어느 장소인지 알아볼 수 있는 값입니다
+ * @param placeId        이 문서가 이어진 장소. extract 가 뽑은 조건을 장소 단위로 policy 에 보낼 때 씁니다.
+ *                       장소에 이어지지 않은 문서는 목록에 나오지 않으므로 늘 값이 있습니다
  * @param payload        소스 응답 원본
- * @param contentHash    내용 해시. extract 가 이미 처리한 내용인지 견주는 데 씁니다
+ * @param contentHash    내용 해시. 처리 결과를 되돌려 쓸 때 이 값을 그대로 보냅니다.
+ *                       그 사이에 재수집이 내용을 바꿨으면 상태가 바뀌지 않습니다
  * @param sourceModified 소스가 알려준 마지막 수정 시각
  */
 public record RawDocumentOutput(
         UUID id,
         SourceType source,
         String sourceId,
+        UUID placeId,
         Map<String, Object> payload,
         String contentHash,
         LocalDateTime sourceModified) {

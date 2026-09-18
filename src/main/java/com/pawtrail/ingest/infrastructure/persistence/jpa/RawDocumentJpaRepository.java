@@ -4,12 +4,17 @@ import com.pawtrail.ingest.domain.enums.DocumentStatus;
 import com.pawtrail.ingest.domain.enums.SourceType;
 import com.pawtrail.ingest.domain.model.RawDocument;
 import com.pawtrail.ingest.domain.repository.SourceModifiedView;
+import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface RawDocumentJpaRepository extends JpaRepository<RawDocument, UUID> {
 
@@ -33,7 +38,42 @@ public interface RawDocumentJpaRepository extends JpaRepository<RawDocument, UUI
      */
     Page<RawDocument> findByStatusOrderByIdAsc(DocumentStatus status, Pageable pageable);
 
-    long countByStatus(DocumentStatus status);
+    /**
+     * 그 상태이면서 장소에 이어진 문서를 오래된 것부터 돌려줍니다.
+     *
+     * 정렬을 메서드 이름에 못 박는 이유는 위와 같습니다.
+     * 대기 상태면 부분 인덱스(idx_raw_document_pending)를 타고, 장소가 없는 소수만 걸러 냅니다.
+     */
+    Page<RawDocument> findByStatusAndPlaceIdIsNotNullOrderByIdAsc(DocumentStatus status, Pageable pageable);
+
+    long countByStatusAndPlaceIdIsNotNull(DocumentStatus status);
+
+    /**
+     * 있는 식별자만 읽습니다. 원본을 읽지 않아 가볍습니다.
+     */
+    @Query("select d.id from RawDocument d where d.id in :ids")
+    List<UUID> findIdsByIdIn(@Param("ids") Collection<UUID> ids);
+
+    /**
+     * 내용 해시가 같을 때만 상태 칸 하나와 감사 칸을 바꿉니다.
+     *
+     * 영속성 컨텍스트를 거치지 않는 쿼리라 앞선 변경을 먼저 내보내고(flushAutomatically)
+     * 끝나면 비웁니다(clearAutomatically). 비우지 않으면 같은 트랜잭션에서 다시 읽을 때
+     * 옛 상태가 담긴 엔티티가 그대로 돌아옵니다.
+     *
+     * @return 바꾼 행 수 — 해시가 같으면 1, 다르면 0
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            update RawDocument d
+               set d.status = :status, d.updatedAt = :updatedAt, d.updatedBy = :updatedBy
+             where d.id = :id and d.contentHash = :contentHash
+            """)
+    int updateStatusIfHashMatches(@Param("id") UUID id,
+                                  @Param("contentHash") String contentHash,
+                                  @Param("status") DocumentStatus status,
+                                  @Param("updatedAt") LocalDateTime updatedAt,
+                                  @Param("updatedBy") String updatedBy);
 
     /**
      * 증분 판단에 쓰는 두 값만 읽습니다. 원본을 읽지 않아 가볍습니다.
