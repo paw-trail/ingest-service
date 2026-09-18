@@ -3,9 +3,11 @@ package com.pawtrail.ingest.domain.repository;
 import com.pawtrail.ingest.domain.enums.DocumentStatus;
 import com.pawtrail.ingest.domain.enums.SourceType;
 import com.pawtrail.ingest.domain.model.RawDocument;
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -38,22 +40,49 @@ public interface RawDocumentRepository {
     Page<RawDocument> findPending(Pageable pageable);
 
     /**
-     * 그 상태의 문서를 가져옵니다.
+     * 그 상태이면서 장소에 이어진 문서를 가져옵니다.
      *
      * 부르는 쪽이 언제나 첫 쪽만 달라고 합니다. 쪽 번호로 넘기지 않습니다.
      * 처리하면 그 문서가 대기 목록에서 빠지므로, 쪽 번호로 넘기면
      * 뒤에 있던 것이 앞으로 밀려와 그만큼을 통째로 건너뜁니다.
      * 게다가 그 일이 조용히 일어나 로그에도 남지 않습니다.
+     *
+     * 장소에 이어지지 않은 문서는 뺍니다.
+     * extract 가 뽑은 조건을 장소 단위로 보내므로 장소가 없는 문서는 보낼 곳이 없습니다.
      */
-    Page<RawDocument> findByStatus(DocumentStatus status, Pageable pageable);
+    Page<RawDocument> findLinkedByStatus(DocumentStatus status, Pageable pageable);
 
     /**
-     * 그 상태의 문서가 몇 건인지 셉니다.
+     * 그 상태이면서 장소에 이어진 문서가 몇 건인지 셉니다.
      *
      * extract 가 앞으로 몇 번을 더 불러야 하는지 판단하는 값입니다.
-     * 진행률을 찍는 데에도 씁니다.
+     * 진행률을 찍는 데에도 씁니다. 목록과 같은 기준으로 셉니다.
      */
-    long countByStatus(DocumentStatus status);
+    long countLinkedByStatus(DocumentStatus status);
+
+    /**
+     * 식별자 목록 가운데 실제로 있는 것만 돌려줍니다.
+     *
+     * 처리 결과를 되돌려 받을 때 없는 문서가 섞였는지 봅니다.
+     * 문서를 통째로 읽지 않습니다. 원본이 소스 응답 그대로라 백 건이면 수 메가바이트가 됩니다.
+     */
+    Set<UUID> findExistingIds(Collection<UUID> ids);
+
+    /**
+     * 내용 해시가 같을 때만 처리 상태를 바꿉니다.
+     *
+     * 상태 칸 하나와 감사 칸만 씁니다. 원본 · 장소 식별자는 건드리지 않습니다.
+     * 엔티티째 저장하면 그사이 재수집이나 장소 넘기기가 바꾼 값을 옛 값으로 되덮을 수 있습니다.
+     *
+     * 해시가 다르면 아무것도 바꾸지 않습니다.
+     * 부르는 쪽이 가져간 사이에 재수집이 내용을 바꾼 것이라, 대기로 두어 새 내용이 다시 나가게 합니다.
+     *
+     * @param updatedAt 감사 칸 — 한 칸만 바꾸는 쿼리라 JPA 감사가 채워 주지 않아 부르는 쪽이 넘깁니다
+     * @param updatedBy 감사 칸 — 같은 이유
+     * @return 바꿨으면 true, 해시가 달라 그대로 두었으면 false
+     */
+    boolean markStatusIfUnchanged(UUID id, String contentHash, DocumentStatus status,
+                                  LocalDateTime updatedAt, String updatedBy);
 
     /**
      * 식별자 목록으로 한 번에 찾습니다.

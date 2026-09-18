@@ -6,9 +6,12 @@ import com.pawtrail.ingest.domain.model.RawDocument;
 import com.pawtrail.ingest.domain.repository.RawDocumentRepository;
 import com.pawtrail.ingest.domain.repository.SourceModifiedView;
 import com.pawtrail.ingest.infrastructure.persistence.jpa.RawDocumentJpaRepository;
+import java.time.LocalDateTime;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -41,15 +44,27 @@ public class RawDocumentRepositoryImpl implements RawDocumentRepository {
     }
 
     @Override
-    public Page<RawDocument> findByStatus(DocumentStatus status, Pageable pageable) {
+    public Page<RawDocument> findLinkedByStatus(DocumentStatus status, Pageable pageable) {
         // 정렬은 메서드 이름에 들어 있으므로 여기서는 개수만 넘김
         // Pageable 에도 정렬을 담으면 같은 규칙이 두 곳에 생겨 한쪽만 고치는 실수가 남
-        return rawDocumentJpaRepository.findByStatusOrderByIdAsc(status, pageable);
+        return rawDocumentJpaRepository.findByStatusAndPlaceIdIsNotNullOrderByIdAsc(status, pageable);
     }
 
     @Override
-    public long countByStatus(DocumentStatus status) {
-        return rawDocumentJpaRepository.countByStatus(status);
+    public long countLinkedByStatus(DocumentStatus status) {
+        return rawDocumentJpaRepository.countByStatusAndPlaceIdIsNotNull(status);
+    }
+
+    @Override
+    public Set<UUID> findExistingIds(Collection<UUID> ids) {
+        return new HashSet<>(rawDocumentJpaRepository.findIdsByIdIn(ids));
+    }
+
+    @Override
+    public boolean markStatusIfUnchanged(UUID id, String contentHash, DocumentStatus status,
+                                         LocalDateTime updatedAt, String updatedBy) {
+        return rawDocumentJpaRepository.updateStatusIfHashMatches(
+                id, contentHash, status, updatedAt, updatedBy) == 1;
     }
 
     @Override
