@@ -200,20 +200,6 @@ public class RawDocument extends BaseEntity {
     }
 
     /**
-     * 추출이 끝난 것으로 표시합니다.
-     */
-    public void markDone() {
-        this.status = DocumentStatus.DONE;
-    }
-
-    /**
-     * 추출에 실패한 것으로 표시합니다.
-     */
-    public void markFailed() {
-        this.status = DocumentStatus.FAILED;
-    }
-
-    /**
      * 병합된 장소를 이어 붙입니다. place 로 넘긴 뒤에 호출됩니다.
      */
     public void linkPlace(UUID linkedPlaceId) {

@@ -129,6 +129,8 @@ public class InternalIngestController {
      * 처리하면 그 문서가 대기 목록에서 빠지므로, 쪽 번호로 넘기면
      * 뒤에 있던 것이 앞으로 밀려와 그만큼을 조용히 건너뜁니다.
      * 언제나 가장 오래된 것부터 주고, 처리한 만큼 다음이 올라옵니다.
+     *
+     * 장소에 이어진 문서만 줍니다. extract 가 조건을 장소 단위로 보내기 때문입니다.
      */
     @GetMapping("/raw")
     public ResponseEntity<CommonApiResponse<PendingDocumentsOutput>> findDocuments(
@@ -148,13 +150,16 @@ public class InternalIngestController {
      * 밖에 드러나는 계약이 아닙니다.
      *
      * 바꾸는 것은 처리 상태 하나뿐입니다. 원본과 표시용 본문은 이 경로로 바뀌지 않습니다.
+     *
+     * 문서마다 처리할 때 본 내용 해시를 함께 받습니다.
+     * 그 사이에 재수집이 내용을 바꿨으면 상태를 바꾸지 않고 건너뛴 건수로 알립니다.
      */
     @PatchMapping("/raw/status")
     public ResponseEntity<CommonApiResponse<StatusUpdateOutput>> updateStatus(
             @Valid @RequestBody RawDocumentStatusRequest request) {
 
         return ResponseEntity.ok(CommonApiResponse.success(
-                rawDocumentStatusService.apply(request.done(), request.failed())));
+                rawDocumentStatusService.apply(request.doneInputs(), request.failedInputs())));
     }
 
     /**

@@ -69,14 +69,19 @@ public class IngestQueryService {
      *
      * *실패한 문서가 대기로 남으면 그것이 계속 맨 앞에 옵니다.
      *  extract 가 실패를 표시하면 대기에서 빠지므로 그 경로를 함께 두었습니다.
+     *
+     * *장소에 이어진 문서만 돌려줍니다. 건수도 같은 기준으로 셉니다.
+     *  extract 는 뽑은 조건을 장소 단위로 policy 에 보내므로 장소가 없는 문서는 보낼 곳이 없습니다.
+     *  좌표 · 주소가 없어 장소 서비스가 건너뛴 문서와, 수집 직후 장소로 넘기기 전의 문서가 여기에 해당합니다.
+     *  앞의 것은 영영 이어지지 않고, 뒤의 것은 장소로 넘기면 그때부터 목록에 나옵니다.
      */
     public PendingDocumentsOutput findDocuments(DocumentStatus status, int size) {
         int limit = clamp(size, MAX_DOCUMENT_SIZE);
         List<RawDocument> documents =
-                rawDocumentRepository.findByStatus(status, PageRequest.ofSize(limit)).getContent();
+                rawDocumentRepository.findLinkedByStatus(status, PageRequest.ofSize(limit)).getContent();
 
         return new PendingDocumentsOutput(
-                rawDocumentRepository.countByStatus(status),
+                rawDocumentRepository.countLinkedByStatus(status),
                 documents.stream().map(this::toOutput).toList());
     }
 
@@ -119,6 +124,7 @@ public class IngestQueryService {
                 document.getId(),
                 document.getSource(),
                 document.getSourceId(),
+                document.getPlaceId(),
                 payload,
                 document.getContentHash(),
                 document.getSourceModified());
