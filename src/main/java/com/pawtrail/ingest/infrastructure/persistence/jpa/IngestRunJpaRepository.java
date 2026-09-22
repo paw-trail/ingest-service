@@ -1,8 +1,11 @@
 package com.pawtrail.ingest.infrastructure.persistence.jpa;
 
 import com.pawtrail.ingest.domain.enums.RunStatus;
+import com.pawtrail.ingest.domain.enums.RunType;
 import com.pawtrail.ingest.domain.enums.SourceType;
 import com.pawtrail.ingest.domain.model.IngestRun;
+import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -24,4 +27,16 @@ public interface IngestRunJpaRepository extends JpaRepository<IngestRun, UUID> {
     List<IngestRun> findAllByOrderByStartedAtDescIdDesc(Pageable pageable);
 
     List<IngestRun> findBySourceOrderByStartedAtDescIdDesc(SourceType source, Pageable pageable);
+
+    // 10분 잠금이 씀 — 그 소스의 받아 오기가 그 시각 뒤에 끝났는지
+    // 끝난 시각이 비어 있는 도는 실행은 비교에서 빠짐 (NULL 은 어떤 시각보다도 뒤가 아님)
+    boolean existsBySourceAndRunTypeInAndFinishedAtAfter(
+            SourceType source, Collection<RunType> runTypes, LocalDateTime since);
+
+    // 관리자 수집 기록이 씀 — 정렬 규칙은 위 메서드들과 같음
+    List<IngestRun> findBySourceInAndRunTypeInOrderByStartedAtDescIdDesc(
+            Collection<SourceType> sources, Collection<RunType> runTypes, Pageable pageable);
+
+    // 기동 때 정리가 씀 — 이 프로세스가 뜨기 전에 시작한 것만
+    List<IngestRun> findByStatusAndStartedAtBefore(RunStatus status, LocalDateTime before);
 }

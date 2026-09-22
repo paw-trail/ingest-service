@@ -2,6 +2,7 @@ package com.pawtrail.ingest.infrastructure.config;
 
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * 수집 설정을 빈으로 올립니다.
@@ -16,8 +17,14 @@ import org.springframework.context.annotation.Configuration;
  * 수집 설정은 바깥을 부르는 값이고 전달 설정은 우리 표를 읽어 보내는 값이라 성격이 다릅니다.
  * 그리고 한 레코드에 값을 더하면 그것을 만드는 검사가 전부 깨져
  * 설정 하나를 늘릴 때마다 여섯 곳을 함께 고치게 됩니다.
+ *
+ * 스케줄도 여기서 켭니다. 매일 예약 수집(IngestScheduler)이 씁니다.
+ * common 도 스케줄을 켜지만 Kafka 가 있는 서비스에서만 켭니다.
+ * 이 서비스는 Kafka 를 걷어 내어 그쪽 설정이 뜨지 않으므로 직접 켜야 합니다.
+ * 켜 두어도 예약은 설정 스위치가 꺼져 있으면 아무것도 걸지 않습니다.
  */
 @Configuration
+@EnableScheduling
 @EnableConfigurationProperties({IngestProperties.class, PlaceLinkProperties.class})
 public class IngestConfig {
 }

@@ -7,8 +7,10 @@ import jakarta.validation.constraints.NotNull;
 /**
  * 수집을 시작해 달라는 요청입니다.
  *
- * Jenkins 잡이 부릅니다.
- * 사람이 브라우저에서 부르는 경로가 아니라 게이트웨이 라우트를 두지 않았습니다.
+ * 두 입구가 같은 모양으로 받습니다.
+ * /internal 트리거는 사람이 전량 · 넘기기 · 바로 보내기를 걸 때 쓰고,
+ * 관리자 입구는 관리자 화면이 두 조합(반려동물 동반여행 증분 · 고캠핑 목록)만 걸 때 씁니다.
+ * 어느 조합을 받을지는 입구가 정합니다. 관리자 쪽 규칙은 IngestRunLauncher 에 있습니다.
  *
  * @param source  수집할 소스
  * @param runType 전량인지 증분인지.

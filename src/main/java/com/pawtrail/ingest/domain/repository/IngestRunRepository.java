@@ -2,6 +2,8 @@ package com.pawtrail.ingest.domain.repository;
 
 import com.pawtrail.ingest.domain.enums.SourceType;
 import com.pawtrail.ingest.domain.model.IngestRun;
+import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -59,9 +61,9 @@ public interface IngestRunRepository {
     /**
      * 최근 실행을 새것부터 돌려줍니다.
      *
-     * 사람이 승인을 판단하는 화면이 씁니다.
-     * 감지는 스케줄이 하고 실행은 사람이 승인한다는 방침이라,
-     * 무엇이 얼마나 바뀌었는지를 보고 다음 실행을 부를지 정합니다.
+     * /internal 의 실행 이력이 씁니다.
+     * 사람이 무엇이 얼마나 바뀌었는지를 보고 다음 실행을 부를지 정합니다.
+     * 관리자 화면은 받아 오기만 추리는 findRecentCollect 를 씁니다.
      *
      * 쪽 번호로 넘기지 않습니다.
      * 실행은 하루에 몇 건씩 쌓이므로 한 해가 지나도 수백 건입니다.
@@ -71,4 +73,36 @@ public interface IngestRunRepository {
      * @param size   몇 건까지 볼지
      */
     List<IngestRun> findRecent(SourceType source, int size);
+
+    /**
+     * 그 소스의 받아 오기가 그 시각 뒤에 끝난 것이 있는지 봅니다.
+     *
+     * 관리자 입구와 매일 예약의 10분 잠금이 씁니다.
+     *
+     * 누가 걸었든 셉니다. 호출 허용량은 관리자 · 예약 · /internal 어느 쪽이 불러도 같이 줄어듭니다.
+     * 넘기기와 바로 보내기는 바깥을 부르지 않아 세지 않습니다.
+     * 아직 도는 실행은 끝난 시각이 없어 여기서 잡히지 않습니다. 그것은 실행 중 검사가 막습니다.
+     */
+    boolean existsCollectFinishedSince(SourceType source, LocalDateTime since);
+
+    /**
+     * 그 소스들의 받아 오기 실행을 새것부터 돌려줍니다.
+     *
+     * 관리자 화면의 수집 기록이 씁니다. 넘기기와 바로 보내기는 담지 않습니다.
+     *
+     * @param sources 이 소스들만 봅니다
+     * @param size    몇 건까지 볼지
+     */
+    List<IngestRun> findRecentCollect(Collection<SourceType> sources, int size);
+
+    /**
+     * 그 시각보다 먼저 시작해 아직 실행 중으로 남은 기록을 찾습니다.
+     *
+     * 기동 때 정리가 이 프로세스가 뜬 시각을 넘겨 부릅니다.
+     * ingest 는 한 대로 뜨므로 그보다 먼저 시작한 실행 중 기록은 앞 프로세스가 끝내지 못한 것입니다.
+     * 그 뒤에 시작한 것은 이 프로세스가 지금 돌리는 실행이라 빼야 합니다.
+     *
+     * @param before 이 시각보다 먼저 시작한 것만 봅니다
+     */
+    List<IngestRun> findAllRunningStartedBefore(LocalDateTime before);
 }
