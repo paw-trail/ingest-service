@@ -37,6 +37,6 @@ public interface IngestRunJpaRepository extends JpaRepository<IngestRun, UUID> {
     List<IngestRun> findBySourceInAndRunTypeInOrderByStartedAtDescIdDesc(
             Collection<SourceType> sources, Collection<RunType> runTypes, Pageable pageable);
 
-    // 기동 때 정리가 씀
-    List<IngestRun> findByStatus(RunStatus status);
+    // 기동 때 정리가 씀 — 이 프로세스가 뜨기 전에 시작한 것만
+    List<IngestRun> findByStatusAndStartedAtBefore(RunStatus status, LocalDateTime before);
 }

@@ -85,7 +85,7 @@ public class IngestRunRepositoryImpl implements IngestRunRepository {
     }
 
     @Override
-    public List<IngestRun> findAllRunning() {
-        return ingestRunJpaRepository.findByStatus(RunStatus.RUNNING);
+    public List<IngestRun> findAllRunningStartedBefore(LocalDateTime before) {
+        return ingestRunJpaRepository.findByStatusAndStartedAtBefore(RunStatus.RUNNING, before);
     }
 }

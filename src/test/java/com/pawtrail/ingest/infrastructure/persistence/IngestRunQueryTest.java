@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -24,7 +25,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * 관리자 입구 · 매일 예약 · 기동 정리가 쓰는 실행 기록 조회를 실제 데이터베이스로 확인합니다.
  *
  * *모의 객체로는 잡을 수 없는 자리입니다.
- *  어떤 실행 종류를 셀지와 끝난 시각 비교는 쿼리 안에 있어서,
+ *  어떤 실행 종류를 셀지와 끝난 시각 · 시작 시각 비교는 쿼리 안에 있어서,
  *  서비스를 아무리 시험해도 조건이 빠지거나 다른 칸을 보는 것을 알아챌 수 없습니다.
  *
  * *실행 중 기록은 소스마다 하나만 둘 수 있습니다(V21 유일 인덱스).
@@ -109,15 +110,23 @@ class IngestRunQueryTest {
     }
 
     @Test
-    @DisplayName("실행 중 기록만 전부 찾는다")
-    void findsAllRunning() {
+    @DisplayName("기동 정리는 기준 시각보다 먼저 시작한 실행 중 기록만 찾는다")
+    void findsRunningStartedBeforeCutoff() {
         finished(SourceType.PET_TOUR, RunType.INCREMENTAL);
-        IngestRun running = ingestRunRepository.saveAndFlush(
-                IngestRun.start(SourceType.GOCAMPING, RunType.FULL));
 
-        assertThat(ingestRunRepository.findAllRunning())
+        // 앞 프로세스가 남긴 것 — 30분 전에 시작해 아직 실행 중
+        IngestRun leftOver = IngestRun.start(SourceType.PET_TOUR, RunType.INCREMENTAL);
+        ReflectionTestUtils.setField(leftOver, "startedAt", LocalDateTime.now().minusMinutes(30));
+        IngestRun orphan = ingestRunRepository.saveAndFlush(leftOver);
+
+        LocalDateTime processStartedAt = LocalDateTime.now().minusMinutes(1);
+
+        // 이 프로세스가 건 것 — 기준 시각 뒤에 시작
+        ingestRunRepository.saveAndFlush(IngestRun.start(SourceType.GOCAMPING, RunType.FULL));
+
+        assertThat(ingestRunRepository.findAllRunningStartedBefore(processStartedAt))
                 .extracting(IngestRun::getId)
-                .containsExactly(running.getId());
+                .containsExactly(orphan.getId());
     }
 
     /**

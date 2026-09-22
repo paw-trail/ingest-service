@@ -85,6 +85,10 @@ public class IngestRunLauncher {
             throw new CustomException(IngestErrorCode.INGEST_COOLDOWN);
         }
 
+        // 10분 잠금 검사와 실행 생성 사이에는 잠금을 걸지 않음 (알고 둔 틈 — README 10-23)
+        //   그 사이에 같은 소스 실행이 시작부터 끝까지 다 돌아야 10분 안에 새 실행이 생김
+        //   두 검사는 몇 ms 차이이고 가장 짧은 실행도 공사 API 를 한 번은 불러 몇 초가 걸림
+        //   새더라도 받아 오기가 한 번 더 돌 뿐이고 나란히 도는 것은 V21 유일 인덱스가 막음
         UUID runId = ingestTriggerService.startRun(source, runType);
         ingestExecutor.execute(runId);
         return runId;

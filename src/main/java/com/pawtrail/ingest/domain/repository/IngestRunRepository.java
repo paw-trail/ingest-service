@@ -96,10 +96,13 @@ public interface IngestRunRepository {
     List<IngestRun> findRecentCollect(Collection<SourceType> sources, int size);
 
     /**
-     * 실행 중으로 남은 기록을 전부 찾습니다.
+     * 그 시각보다 먼저 시작해 아직 실행 중으로 남은 기록을 찾습니다.
      *
-     * 기동 때 정리가 씁니다.
-     * ingest 는 한 대로 뜨므로 뜨는 순간의 실행 중 기록은 앞 프로세스가 끝내지 못한 것입니다.
+     * 기동 때 정리가 이 프로세스가 뜬 시각을 넘겨 부릅니다.
+     * ingest 는 한 대로 뜨므로 그보다 먼저 시작한 실행 중 기록은 앞 프로세스가 끝내지 못한 것입니다.
+     * 그 뒤에 시작한 것은 이 프로세스가 지금 돌리는 실행이라 빼야 합니다.
+     *
+     * @param before 이 시각보다 먼저 시작한 것만 봅니다
      */
-    List<IngestRun> findAllRunning();
+    List<IngestRun> findAllRunningStartedBefore(LocalDateTime before);
 }
