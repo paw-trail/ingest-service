@@ -27,8 +27,9 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 담아 둔 것을 꺼내 줍니다.
  *
- * 부르는 쪽이 둘이고 필요한 것이 다릅니다.
- * extract 는 처리할 문서를 가져가고, 사람은 실행 이력을 보고 승인을 판단합니다.
+ * 부르는 쪽마다 필요한 것이 다릅니다.
+ * extract 는 처리할 문서를 가져가고, 장소 서비스는 원문을 보여 주고,
+ * 관리자 화면은 공사 API 를 부른 수집 기록을 봅니다.
  *
  * 읽기만 하므로 트랜잭션을 읽기 전용으로 둡니다.
  */
@@ -92,6 +93,23 @@ public class IngestQueryService {
      */
     public IngestRunsOutput findRecentRuns(SourceType source, int size) {
         List<IngestRun> runs = ingestRunRepository.findRecent(source, clamp(size, MAX_RUN_SIZE));
+        return new IngestRunsOutput(runs.stream().map(this::toOutput).toList());
+    }
+
+    /**
+     * 관리자 화면이 보는 수집 기록입니다. 공사 API 를 부른 받아 오기만 새것부터 돌려줍니다.
+     *
+     * 반려동물 동반여행 · 고캠핑의 전량 · 증분만 담습니다.
+     * 넘기기 · 바로 보내기와 문화정보원 · 행정안전부 실행은 공사 API 를 부르지 않아 뺍니다.
+     * 섞이면 받은 건수 0 인 줄이 끼어 카드 이름(공사 데이터 최신 수집)과 어긋나고,
+     * 10분 잠금이 세는 실행과 표가 달라져 막힌 까닭이 표에서 보이지 않습니다.
+     *
+     * 누가 걸었든 함께 담습니다 — 관리자 · 매일 예약 · /internal.
+     * 개발하며 돌린 반려동물 동반여행 전량도 실제 호출이라 이력으로 남깁니다.
+     */
+    public IngestRunsOutput findRecentCollectRuns(int size) {
+        List<IngestRun> runs = ingestRunRepository.findRecentCollect(
+                SourceType.tourApiSources(), clamp(size, MAX_RUN_SIZE));
         return new IngestRunsOutput(runs.stream().map(this::toOutput).toList());
     }
 
