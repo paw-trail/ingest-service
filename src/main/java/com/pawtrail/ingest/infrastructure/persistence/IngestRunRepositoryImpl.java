@@ -1,10 +1,14 @@
 package com.pawtrail.ingest.infrastructure.persistence;
 
 import com.pawtrail.ingest.domain.enums.RunStatus;
+import com.pawtrail.ingest.domain.enums.RunType;
 import com.pawtrail.ingest.domain.enums.SourceType;
 import com.pawtrail.ingest.domain.model.IngestRun;
 import com.pawtrail.ingest.domain.repository.IngestRunRepository;
 import com.pawtrail.ingest.infrastructure.persistence.jpa.IngestRunJpaRepository;
+import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -19,6 +23,15 @@ import org.springframework.stereotype.Repository;
 @Repository
 @RequiredArgsConstructor
 public class IngestRunRepositoryImpl implements IngestRunRepository {
+
+    /**
+     * 받아 오기에 드는 실행 종류입니다. 넘기기와 바로 보내기는 뺍니다.
+     *
+     * 목록을 여기 적지 않고 열거값의 표시에서 뽑습니다.
+     * 실행 종류가 늘어도 이 자리를 따로 고치지 않게 하려는 것입니다.
+     */
+    private static final List<RunType> COLLECT_TYPES =
+            Arrays.stream(RunType.values()).filter(RunType::isCollect).toList();
 
     private final IngestRunJpaRepository ingestRunJpaRepository;
 
@@ -56,5 +69,23 @@ public class IngestRunRepositoryImpl implements IngestRunRepository {
         return source == null
                 ? ingestRunJpaRepository.findAllByOrderByStartedAtDescIdDesc(limit)
                 : ingestRunJpaRepository.findBySourceOrderByStartedAtDescIdDesc(source, limit);
+    }
+
+    @Override
+    public boolean existsCollectFinishedSince(SourceType source, LocalDateTime since) {
+        return ingestRunJpaRepository.existsBySourceAndRunTypeInAndFinishedAtAfter(
+                source, COLLECT_TYPES, since);
+    }
+
+    @Override
+    public List<IngestRun> findRecentCollect(Collection<SourceType> sources, int size) {
+        // 정렬은 메서드 이름에 들어 있어 여기서는 개수만 정함 — findRecent 와 같은 까닭
+        return ingestRunJpaRepository.findBySourceInAndRunTypeInOrderByStartedAtDescIdDesc(
+                sources, COLLECT_TYPES, PageRequest.ofSize(size));
+    }
+
+    @Override
+    public List<IngestRun> findAllRunningStartedBefore(LocalDateTime before) {
+        return ingestRunJpaRepository.findByStatusAndStartedAtBefore(RunStatus.RUNNING, before);
     }
 }

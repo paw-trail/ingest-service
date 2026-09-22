@@ -76,6 +76,13 @@ app:
     max-retries: 0
     retry-backoff-ms: 1000
     max-consecutive-failures: 5
+    # 관리자 입구 · 매일 예약의 잠금 시간 — 없어도 10분이지만 사본을 맞춰 둠
+    cooldown: 10m
+    schedule:
+      # 시험에서는 끄고 둠
+      # 켜 두면 새벽 4시에 돌린 시험이 공사 API 를 부르려 함 (인증키가 가짜라 실패로 남음)
+      enabled: false
+      cron: "0 0 4 * * *"
     link:
       # 이 시험은 장소 서비스를 부르지 않음, 값이 비면 바인딩이 실패하므로 자리만 채움
       chunk-size: 100
